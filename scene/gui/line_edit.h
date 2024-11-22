@@ -83,6 +83,12 @@ public:
 		KEYBOARD_TYPE_URL
 	};
 
+	enum ExpandMode {
+		EXPAND_MODE_ORIGINAL_SIZE,
+		EXPAND_MODE_FIT_TO_TEXT,
+		EXPAND_MODE_FIT_TO_LINE_EDIT
+	};
+
 private:
 	HorizontalAlignment alignment = HORIZONTAL_ALIGNMENT_LEFT;
 
@@ -90,6 +96,7 @@ private:
 	bool editable = false;
 	bool pass = false;
 	bool text_changed_dirty = false;
+	ExpandMode expand_mode = EXPAND_MODE_ORIGINAL_SIZE;
 
 	bool alt_start = false;
 	bool alt_start_no_hold = false;
@@ -145,6 +152,7 @@ private:
 
 	Ref<Texture2D> right_icon;
 	bool flat = false;
+	float right_icon_scale = 1.0;
 
 	struct Selection {
 		int begin = 0;
@@ -249,6 +257,8 @@ private:
 	void _backspace(bool p_word = false, bool p_all_to_left = false);
 	void _delete(bool p_word = false, bool p_all_to_right = false);
 	void _texture_changed();
+
+	Point2 _get_right_icon_size(Ref<Texture2D> p_right_icon, bool p_get_min) const;
 
 protected:
 	bool _is_over_clear_button(const Point2 &p_pos) const;
@@ -390,6 +400,12 @@ public:
 	void set_right_icon(const Ref<Texture2D> &p_icon);
 	Ref<Texture2D> get_right_icon();
 
+	void set_expand_mode(ExpandMode p_mode);
+	ExpandMode get_expand_mode() const;
+
+	void set_right_icon_scale(float p_ratio);
+	float get_right_icon_scale() const;
+
 	void set_flat(bool p_enabled);
 	bool is_flat() const;
 
@@ -409,5 +425,6 @@ public:
 
 VARIANT_ENUM_CAST(LineEdit::MenuItems);
 VARIANT_ENUM_CAST(LineEdit::VirtualKeyboardType);
+VARIANT_ENUM_CAST(LineEdit::ExpandMode);
 
 #endif // LINE_EDIT_H
