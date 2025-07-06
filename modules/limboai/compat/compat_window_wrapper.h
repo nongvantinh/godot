@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  compat_window_wrapper.h                                               */
+/*  compat_window_wrapper.h                                                      */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -28,9 +28,10 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
+// * This is a port of a WindowWrapper from the Godot Engine to use with godot-cpp.
+
 #ifndef COMPAT_WINDOW_WRAPPER_H
 #define COMPAT_WINDOW_WRAPPER_H
-// * This is a port of a WindowWrapper from the Godot Engine to use with godot-cpp.
 
 #ifdef LIMBOAI_MODULE
 #include "editor/window_wrapper.h"
@@ -38,6 +39,8 @@
 #define CompatWindowWrapper WindowWrapper
 #define CompatShortcutBin ShortcutBin
 #define CompatScreenSelect ScreenSelect
+
+#endif // LIMBOAI_MODULE
 
 #ifdef LIMBOAI_GDEXTENSION
 
@@ -136,7 +139,5 @@ public:
 };
 
 #endif // ! LIMBOAI_GDEXTENSION
-
-#endif // COMPAT_WINDOW_WRAPPER_H
 
 #endif // COMPAT_WINDOW_WRAPPER_H

@@ -1,35 +1,3 @@
-/**************************************************************************/
-/*  limbo_utility.h                                                       */
-/**************************************************************************/
-/*                         This file is part of:                          */
-/*                             GODOT ENGINE                               */
-/*                        https://godotengine.org                         */
-/**************************************************************************/
-/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
-/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
-/*                                                                        */
-/* Permission is hereby granted, free of charge, to any person obtaining  */
-/* a copy of this software and associated documentation files (the        */
-/* "Software"), to deal in the Software without restriction, including    */
-/* without limitation the rights to use, copy, modify, merge, publish,    */
-/* distribute, sublicense, and/or sell copies of the Software, and to     */
-/* permit persons to whom the Software is furnished to do so, subject to  */
-/* the following conditions:                                              */
-/*                                                                        */
-/* The above copyright notice and this permission notice shall be         */
-/* included in all copies or substantial portions of the Software.        */
-/*                                                                        */
-/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
-/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
-/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
-/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
-/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
-/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
-/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
-/**************************************************************************/
-
-#ifndef LIMBO_UTILITY_H
-#define LIMBO_UTILITY_H
 /**
  * limbo_utility.h
  * =============================================================================
@@ -41,6 +9,9 @@
  * =============================================================================
  */
 
+#ifndef LIMBO_UTILITY_H
+#define LIMBO_UTILITY_H
+
 #include "../compat/limbo_compat.h"
 
 #ifdef LIMBOAI_MODULE
@@ -48,6 +19,8 @@
 #include "core/object/object.h"
 #include "core/templates/hash_map.h"
 #include "scene/resources/texture.h"
+
+#endif // LIMBOAI_MODULE
 
 #ifdef LIMBOAI_GDEXTENSION
 #include <godot_cpp/classes/object.hpp>
@@ -135,7 +108,5 @@ VARIANT_ENUM_CAST(LimboUtility::Operation);
 #define LW_SHORTCUT(m_path, m_name, m_keycode) (LimboUtility::get_singleton()->add_shortcut(m_path, m_name, m_keycode))
 #define LW_IS_SHORTCUT(m_path, m_event) (LimboUtility::get_singleton()->is_shortcut(m_path, m_event))
 #define LW_GET_SHORTCUT(m_path) (LimboUtility::get_singleton()->get_shortcut(m_path))
-
-#endif // LIMBO_UTILITY_H
 
 #endif // LIMBO_UTILITY_H

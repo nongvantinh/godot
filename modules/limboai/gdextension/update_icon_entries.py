@@ -14,10 +14,10 @@ license that can be found in the LICENSE file or at
 https://opensource.org/licenses/MIT.
 """
 
-import getopt
-import glob
 import os
+import glob
 import sys
+import getopt
 
 
 def usage():
