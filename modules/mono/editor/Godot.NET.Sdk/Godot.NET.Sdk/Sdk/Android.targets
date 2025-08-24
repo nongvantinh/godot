@@ -1,0 +1,12 @@
+<Project>
+  <Target Name="PropagateUseMonoRuntimeToProjectReferences"
+          BeforeTargets="ResolveReferences">
+    <ItemGroup>
+      <ProjectReference Update="@(ProjectReference)">
+        <AdditionalProperties>
+          UseMonoRuntime=$(UseMonoRuntime);%(ProjectReference.AdditionalProperties)
+        </AdditionalProperties>
+      </ProjectReference>
+    </ItemGroup>
+  </Target>
+</Project>

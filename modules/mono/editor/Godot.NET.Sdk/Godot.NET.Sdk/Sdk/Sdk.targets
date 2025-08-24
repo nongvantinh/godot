@@ -21,6 +21,9 @@
     <PackageReference Include="GodotSharpEditor" Version="$(PackageVersion_GodotSharp)" Condition=" '$(Configuration)' == 'Debug' " />
   </ItemGroup>
 
+  <!-- Android-specific build targets -->
+  <Import Project="$(MSBuildThisFileDirectory)\Android.targets" Condition=" '$(GodotTargetPlatform)' == 'android' " />
+
   <!-- iOS-specific build targets -->
   <Import Project="$(MSBuildThisFileDirectory)\iOSNativeAOT.targets" Condition=" '$(GodotTargetPlatform)' == 'ios' " />
 
