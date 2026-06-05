@@ -177,3 +177,8 @@ env.modules_sources += module_obj
 
 # Needed to force rebuilding the module files when the thirdparty library is updated.
 env.Depends(module_obj, thirdparty_obj)
+
+# Expose Jolt includes to the global env so that test headers (compiled as part of
+# tests/test_main.cpp via modules/modules_tests.gen.h) can include Jolt headers.
+if env["tests"]:
+    env.Prepend(CPPPATH=[thirdparty_dir])
