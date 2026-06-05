@@ -274,6 +274,40 @@
 				[/codeblock]
 			</description>
 		</method>
+		<method name="physics_iteration">
+			<return type="bool" />
+			<param index="0" name="delta" type="float" />
+			<description>
+				Advances the physics simulation by exactly one tick of [param delta] seconds. Runs [method Node._physics_process], emits [signal SceneTree.physics_frame], updates navigation servers, flushes the message queue, and steps the [PhysicsServer2D] and [PhysicsServer3D] — the same sequence the automatic physics loop executes each tick. Also advances [method get_physics_frames] by [code]1[/code] and consumes input edges (see [method Input.is_action_just_pressed]).
+				Returns [code]true[/code] if the main loop requested termination during this tick (equivalent to [method SceneTree.quit] being called inside [method Node._physics_process]), matching the exit signal the automatic loop would have returned. Returns [code]false[/code] otherwise.
+				[b]Note:[/b] This method requires [member ProjectSettings.physics/common/manual_physics_stepping] to be [code]true[/code]. If that setting is [code]false[/code], an error is pushed, the call is a no-op, and [code]false[/code] is returned.
+				[b]Note:[/b] In Phase 1, enabling this setting does [i]not[/i] disable the automatic physics loop. Manual ticks are additive. Full loop-ownership transfer from script is out of scope until a later phase.
+				[b]Note:[/b] Mixing automatic stepping with manual stepping in the same frame may produce unintended input-edge consumption. Hardening of mixed auto+manual edge cases is deferred to a later phase.
+				[codeblocks]
+				[gdscript]
+				# Sub-stepping: advance physics at a finer rate than the automatic tick.
+				func _process(delta):
+				    var N := 4
+				    for i in N:
+				        Engine.physics_iteration(delta / N)
+				[/gdscript]
+				[csharp]
+				// Sub-stepping: advance physics at a finer rate than the automatic tick.
+				public override void _Process(double delta)
+				{
+				    base._Process(delta);
+
+				    int n = 4;
+				    for (int i = 0; i &lt; n; i++)
+				    {
+				        Engine.Singleton.PhysicsIteration(delta / n);
+				    }
+				}
+				[/csharp]
+				[/codeblocks]
+				See also [member ProjectSettings.physics/common/manual_physics_stepping].
+			</description>
+		</method>
 		<method name="register_script_language">
 			<return type="int" enum="Error" />
 			<param index="0" name="language" type="ScriptLanguage" />
