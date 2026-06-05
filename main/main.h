@@ -77,6 +77,12 @@ public:
 	static void test_cleanup();
 	static int start();
 
+	// Runs exactly one physics tick: the body previously inlined in Main::iteration's
+	// physics for-loop. Returns true iff MainLoop::physics_process requested exit.
+	// Registered as a callback on ::Engine at startup so core_bind can invoke it
+	// without a core→main reverse dependency.
+	static bool physics_iteration_step(double p_physics_step, double p_time_scale);
+
 	static bool iteration();
 	static void force_redraw();
 

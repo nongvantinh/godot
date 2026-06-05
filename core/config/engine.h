@@ -42,6 +42,11 @@ class TypedArray;
 
 class Engine {
 public:
+	// Callback registered by Main at startup so core_bind::Engine::physics_iteration
+	// can invoke the per-physics-tick body without a core→main reverse dependency.
+	// Returns true iff the main loop requested termination during that tick.
+	typedef bool (*ManualPhysicsIterationCallback)(double p_step, double p_time_scale);
+
 	struct Singleton {
 		StringName name;
 		Object *ptr = nullptr;
@@ -107,6 +112,8 @@ private:
 	bool frame_server_synced = false;
 
 	bool freeze_time_scale = false;
+
+	ManualPhysicsIterationCallback _manual_physics_iteration_callback = nullptr;
 
 protected:
 	void _update_time_scale();
@@ -223,6 +230,11 @@ public:
 	void set_freeze_time_scale(bool p_frozen);
 	void set_embedded_in_editor(bool p_enabled);
 	bool is_embedded_in_editor() const;
+
+	// Called by Main at startup to register the physics tick body so core_bind
+	// can invoke it without a core→main dependency.
+	void set_manual_physics_iteration_callback(ManualPhysicsIterationCallback p_callback);
+	ManualPhysicsIterationCallback get_manual_physics_iteration_callback() const;
 
 	Engine();
 	virtual ~Engine();
