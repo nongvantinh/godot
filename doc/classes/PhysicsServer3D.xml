@@ -1534,6 +1534,36 @@
 				[/codeblocks]
 			</description>
 		</method>
+		<method name="space_clone_state">
+			<return type="bool" />
+			<param index="0" name="src_space" type="RID" />
+			<param index="1" name="dst_space" type="RID" />
+			<description>
+				Copies the physics state of every body in [param src_space] into the corresponding body in [param dst_space], matched by registration order (ordinal index). Returns [code]true[/code] on success; [code]false[/code] if either RID is invalid, [param src_space] and [param dst_space] are the same space, or the body counts differ.
+				The clone is state-only: transform, linear velocity, angular velocity, and sleep/active state are copied. No bodies, areas, or joints are created or destroyed. The caller must pre-populate [param dst_space] with the same number of bodies in the same creation order as [param src_space].
+				Clone fidelity is [constant SPACE_FEATURE_PARTIAL] on all backends (query via [method space_get_feature] with [constant FEATURE_STATE_CLONE]). Warm-start and contact-cache state is not preserved across spaces, so the first step after a clone may diverge from the source trajectory before converging.
+				The error mode is all-or-nothing: if body counts differ, a warning is printed and no body in [param dst_space] is modified.
+				[b]Note:[/b] Must be called from the main thread.
+				[codeblocks]
+				[gdscript]
+				var src = PhysicsServer3D.space_create()
+				PhysicsServer3D.space_set_active(src, true)
+				var dst = PhysicsServer3D.space_create()
+				PhysicsServer3D.space_set_active(dst, true)
+				# ... add matching bodies to both spaces in the same order ...
+				var ok: bool = PhysicsServer3D.space_clone_state(src, dst)
+				[/gdscript]
+				[csharp]
+				var src = PhysicsServer3D.SpaceCreate();
+				PhysicsServer3D.SpaceSetActive(src, true);
+				var dst = PhysicsServer3D.SpaceCreate();
+				PhysicsServer3D.SpaceSetActive(dst, true);
+				// ... add matching bodies to both spaces in the same order ...
+				bool ok = PhysicsServer3D.SpaceCloneState(src, dst);
+				[/csharp]
+				[/codeblocks]
+			</description>
+		</method>
 		<method name="space_save_state">
 			<return type="PackedByteArray" />
 			<param index="0" name="space" type="RID" />
@@ -2043,6 +2073,9 @@
 		</constant>
 		<constant name="FEATURE_STATE_SNAPSHOT" value="0" enum="SpaceFeature">
 			Feature flag for state snapshot support. Pass this to [method space_get_feature] to query whether the active backend can save and restore the complete simulation state via [method space_save_state] and [method space_restore_state].
+		</constant>
+		<constant name="FEATURE_STATE_CLONE" value="1" enum="SpaceFeature">
+			Feature flag for cross-space state clone support. Pass this to [method space_get_feature] to query the fidelity of [method space_clone_state] for the given space. All backends report [constant SPACE_FEATURE_PARTIAL]: clone copies the Phase-3 field set (transform, linear/angular velocity, sleep state) but does not preserve warm-start or contact-cache state, so the first step after a clone may diverge slightly from the source trajectory.
 		</constant>
 		<constant name="SPACE_FEATURE_NONE" value="0" enum="SpaceFeatureSupport">
 			The active backend does not support this feature at all. [method space_save_state] will return an empty array and [method space_restore_state] will return [code]false[/code].

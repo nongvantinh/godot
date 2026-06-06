@@ -45,7 +45,9 @@ public:
 	// Callback registered by Main at startup so core_bind::Engine::physics_iteration
 	// can invoke the per-physics-tick body without a core→main reverse dependency.
 	// Returns true iff the main loop requested termination during that tick.
-	typedef bool (*ManualPhysicsIterationCallback)(double p_step, double p_time_scale);
+	// p_dry_run: when true the tick must NOT advance get_physics_frames() or
+	// consume Input action edges (enforced by DEV_ASSERT inside the body).
+	typedef bool (*ManualPhysicsIterationCallback)(double p_step, double p_time_scale, bool p_dry_run);
 
 	struct Singleton {
 		StringName name;

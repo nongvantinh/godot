@@ -155,6 +155,16 @@ public:
 		end_sync();
 		return ok;
 	}
+	virtual bool space_clone_state(RID p_src_space, RID p_dst_space) override {
+		// Single critical section: hold the physics lock across the full
+		// src-read and dst-write so no state can advance between them.
+		ERR_FAIL_COND_V_MSG(!Thread::is_main_thread(), false,
+				"space_clone_state must be called from the main thread.");
+		sync();
+		bool ok = physics_server_3d->space_clone_state(p_src_space, p_dst_space);
+		end_sync();
+		return ok;
+	}
 	virtual void space_reset(RID p_space) override {
 		ERR_FAIL_COND_MSG(!Thread::is_main_thread(),
 				"space_reset must be called from the main thread.");

@@ -458,6 +458,7 @@ public:
 	EXBIND1(space_flush_queries, RID)
 	EXBIND1R(PackedByteArray, space_save_state, RID)
 	EXBIND2R(bool, space_restore_state, RID, const PackedByteArray &)
+	EXBIND2R(bool, space_clone_state, RID, RID)
 	EXBIND1(space_reset, RID)
 	EXBIND2RC(int, space_get_feature, RID, SpaceFeature)
 

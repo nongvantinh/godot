@@ -574,7 +574,7 @@ protected:
 
 public:
 	static Engine *get_singleton() { return singleton; }
-	bool physics_iteration(double p_delta);
+	bool physics_iteration(double p_delta, bool p_dry_run = false);
 
 	void set_physics_ticks_per_second(int p_ips);
 	int get_physics_ticks_per_second() const;

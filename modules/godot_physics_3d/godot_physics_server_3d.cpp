@@ -2052,8 +2052,66 @@ void GodotPhysicsServer3D::space_reset(RID p_space) {
 	// Joint RIDs remain valid per the spec (not freed).
 }
 
+bool GodotPhysicsServer3D::space_clone_state(RID p_src_space, RID p_dst_space) {
+	GodotSpace3D *src = space_owner.get_or_null(p_src_space);
+	ERR_FAIL_NULL_V_MSG(src, false, "space_clone_state: invalid src_space RID.");
+	GodotSpace3D *dst = space_owner.get_or_null(p_dst_space);
+	ERR_FAIL_NULL_V_MSG(dst, false, "space_clone_state: invalid dst_space RID.");
+	ERR_FAIL_COND_V_MSG(src == dst, false, "space_clone_state: src_space and dst_space must differ.");
+
+	// Collect bodies in stable insertion order (NOT get_objects() — HashSet order is unstable).
+	LocalVector<GodotBody3D *> src_bodies;
+	LocalVector<GodotBody3D *> dst_bodies;
+
+	for (GodotCollisionObject3D *obj : src->get_objects_ordered()) {
+		if (obj->get_type() == GodotCollisionObject3D::TYPE_BODY) {
+			src_bodies.push_back(static_cast<GodotBody3D *>(obj));
+		}
+	}
+	for (GodotCollisionObject3D *obj : dst->get_objects_ordered()) {
+		if (obj->get_type() == GodotCollisionObject3D::TYPE_BODY) {
+			dst_bodies.push_back(static_cast<GodotBody3D *>(obj));
+		}
+	}
+
+	// All-or-nothing: body count must match.
+	if (src_bodies.size() != dst_bodies.size()) {
+		WARN_PRINT("space_clone_state: body count mismatch between src and dst spaces — no state was written.");
+		return false;
+	}
+
+	// Stage all source state before writing any destination body (no partial write).
+	struct BodyState3D {
+		Transform3D transform;
+		Vector3 linear_velocity;
+		Vector3 angular_velocity;
+		bool active;
+	};
+	LocalVector<BodyState3D> staged;
+	staged.resize(src_bodies.size());
+	for (uint32_t i = 0; i < src_bodies.size(); i++) {
+		staged[i].transform = src_bodies[i]->get_transform();
+		staged[i].linear_velocity = src_bodies[i]->get_linear_velocity();
+		staged[i].angular_velocity = src_bodies[i]->get_angular_velocity();
+		staged[i].active = src_bodies[i]->is_active();
+	}
+
+	// Apply staged state to dst bodies pairwise (ordinal i → ordinal i).
+	for (uint32_t i = 0; i < dst_bodies.size(); i++) {
+		dst_bodies[i]->set_state(BODY_STATE_TRANSFORM, staged[i].transform);
+		dst_bodies[i]->set_linear_velocity(staged[i].linear_velocity);
+		dst_bodies[i]->set_angular_velocity(staged[i].angular_velocity);
+		dst_bodies[i]->set_active(staged[i].active);
+	}
+
+	return true;
+}
+
 int GodotPhysicsServer3D::space_get_feature(RID p_space, SpaceFeature p_feature) const {
 	if (p_feature == FEATURE_STATE_SNAPSHOT) {
+		return SPACE_FEATURE_PARTIAL;
+	}
+	if (p_feature == FEATURE_STATE_CLONE) {
 		return SPACE_FEATURE_PARTIAL;
 	}
 	return SPACE_FEATURE_NONE;

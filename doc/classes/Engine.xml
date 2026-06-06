@@ -277,9 +277,12 @@
 		<method name="physics_iteration">
 			<return type="bool" />
 			<param index="0" name="delta" type="float" />
+			<param index="1" name="dry_run" type="bool" default="false" />
 			<description>
-				Advances the physics simulation by exactly one tick of [param delta] seconds. Runs [method Node._physics_process], emits [signal SceneTree.physics_frame], updates navigation servers, flushes the message queue, and steps the [PhysicsServer2D] and [PhysicsServer3D] — the same sequence the automatic physics loop executes each tick. Also advances [method get_physics_frames] by [code]1[/code] and consumes input edges (see [method Input.is_action_just_pressed]).
-				Returns [code]true[/code] if the main loop requested termination during this tick (equivalent to [method SceneTree.quit] being called inside [method Node._physics_process]), matching the exit signal the automatic loop would have returned. Returns [code]false[/code] otherwise.
+				Advances the physics simulation by exactly one tick of [param delta] seconds.
+				When [param dry_run] is [code]false[/code] (the default), executes the full tick: runs [method Node._physics_process], emits [signal SceneTree.physics_frame], updates navigation servers, flushes the message queue, and steps the [PhysicsServer2D] and [PhysicsServer3D]. Also advances [method get_physics_frames] by [code]1[/code] and consumes input edges (see [method Input.is_action_just_pressed]).
+				When [param dry_run] is [code]true[/code], only the physics solver advances — [method Node._physics_process], navigation, message-queue flushes, and interpolation preparation are suppressed. [method get_physics_frames] is [b]not[/b] incremented and no input action edges are consumed. Use dry-run to predict future body positions (e.g. in a clone space) without disturbing the live world or the engine's frame counters.
+				Returns [code]true[/code] if the main loop requested termination during this tick (only possible when [param dry_run] is [code]false[/code]). Returns [code]false[/code] otherwise.
 				[b]Note:[/b] This method requires [member ProjectSettings.physics/common/manual_physics_stepping] to be [code]true[/code]. If that setting is [code]false[/code], an error is pushed, the call is a no-op, and [code]false[/code] is returned.
 				[b]Note:[/b] In Phase 1, enabling this setting does [i]not[/i] disable the automatic physics loop. Manual ticks are additive. Full loop-ownership transfer from script is out of scope until a later phase.
 				[b]Note:[/b] Mixing automatic stepping with manual stepping in the same frame may produce unintended input-edge consumption. Hardening of mixed auto+manual edge cases is deferred to a later phase.
@@ -290,6 +293,14 @@
 				    var N := 4
 				    for i in N:
 				        Engine.physics_iteration(delta / N)
+
+				# Dry-run prediction: step a clone space without side effects.
+				func predict_trajectory(clone_space: RID, steps: int, dt: float) -&gt; Array[Vector3]:
+				    var positions: Array[Vector3] = []
+				    for i in steps:
+				        Engine.physics_iteration(dt, true)  # dry_run=true
+				        positions.append(get_clone_body_position(clone_space))
+				    return positions
 				[/gdscript]
 				[csharp]
 				// Sub-stepping: advance physics at a finer rate than the automatic tick.

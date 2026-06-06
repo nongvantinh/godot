@@ -653,6 +653,7 @@ void PhysicsServer2D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("space_step_safe", "space", "delta"), &PhysicsServer2D::space_step_safe);
 	ClassDB::bind_method(D_METHOD("space_save_state", "space"), &PhysicsServer2D::space_save_state);
 	ClassDB::bind_method(D_METHOD("space_restore_state", "space", "state"), &PhysicsServer2D::space_restore_state);
+	ClassDB::bind_method(D_METHOD("space_clone_state", "src_space", "dst_space"), &PhysicsServer2D::space_clone_state);
 	ClassDB::bind_method(D_METHOD("space_reset", "space"), &PhysicsServer2D::space_reset);
 	ClassDB::bind_method(D_METHOD("space_get_feature", "space", "feature"), &PhysicsServer2D::space_get_feature);
 
@@ -908,6 +909,7 @@ void PhysicsServer2D::_bind_methods() {
 	BIND_ENUM_CONSTANT(INFO_ISLAND_COUNT);
 
 	BIND_ENUM_CONSTANT(FEATURE_STATE_SNAPSHOT);
+	BIND_ENUM_CONSTANT(FEATURE_STATE_CLONE);
 
 	BIND_ENUM_CONSTANT(SPACE_FEATURE_NONE);
 	BIND_ENUM_CONSTANT(SPACE_FEATURE_PARTIAL);
