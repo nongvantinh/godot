@@ -30,14 +30,83 @@
 
 #pragma once
 
-#ifdef DEBUG_ENABLED
-
-#include "core/io/file_access.h"
+#include "core/variant/variant.h"
 
 #include <Jolt/Jolt.h>
 
 #include <Jolt/Core/StreamIn.h>
 #include <Jolt/Core/StreamOut.h>
+#include <Jolt/Physics/StateRecorder.h>
+
+// In-memory StateRecorder backed by a PackedByteArray.
+// Not DEBUG_ENABLED-gated — the public API ships in release builds.
+//
+// JoltMemoryStateRecorderOut: used for save_state — writes into an owned PackedByteArray.
+// JoltMemoryStateRecorderIn:  used for restore_state — reads from a borrowed PackedByteArray.
+// Both subclass JPH::StateRecorder (which itself inherits StreamIn + StreamOut).
+// Only the relevant stream direction (Read vs Write) is ever called by Jolt
+// when the recorder is used for save or restore respectively.
+
+class JoltMemoryStateRecorderOut final : public JPH::StateRecorder {
+	PackedByteArray &data;
+	bool failed = false;
+
+public:
+	explicit JoltMemoryStateRecorderOut(PackedByteArray &p_data) :
+			data(p_data) {}
+
+	virtual void WriteBytes(const void *p_data_ptr, size_t p_bytes) override {
+		if (failed || p_bytes == 0) {
+			return;
+		}
+		int64_t old_size = data.size();
+		int64_t new_size = old_size + (int64_t)p_bytes;
+		data.resize(new_size);
+		if (data.size() != new_size) {
+			failed = true;
+			return;
+		}
+		memcpy(data.ptrw() + old_size, p_data_ptr, p_bytes);
+	}
+
+	virtual bool IsFailed() const override { return failed; }
+
+	// ReadBytes not used during save; stub that marks failure if called unexpectedly.
+	virtual void ReadBytes(void *, size_t) override { failed = true; }
+	virtual bool IsEOF() const override { return true; }
+};
+
+class JoltMemoryStateRecorderIn final : public JPH::StateRecorder {
+	const PackedByteArray &data;
+	int64_t cursor = 0;
+	bool failed = false;
+
+public:
+	explicit JoltMemoryStateRecorderIn(const PackedByteArray &p_data) :
+			data(p_data) {}
+
+	virtual void ReadBytes(void *p_data_ptr, size_t p_bytes) override {
+		if (failed || p_bytes == 0) {
+			return;
+		}
+		if (cursor + (int64_t)p_bytes > data.size()) {
+			failed = true;
+			return;
+		}
+		memcpy(p_data_ptr, data.ptr() + cursor, p_bytes);
+		cursor += (int64_t)p_bytes;
+	}
+
+	virtual bool IsEOF() const override { return cursor >= data.size(); }
+	virtual bool IsFailed() const override { return failed; }
+
+	// WriteBytes not used during restore; stub.
+	virtual void WriteBytes(const void *, size_t) override { failed = true; }
+};
+
+#ifdef DEBUG_ENABLED
+
+#include "core/io/file_access.h"
 
 class JoltStreamOutputWrapper final : public JPH::StreamOut {
 	Ref<FileAccess> file_access;

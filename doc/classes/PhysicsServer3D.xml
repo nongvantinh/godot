@@ -1463,6 +1463,98 @@
 				[/codeblocks]
 			</description>
 		</method>
+		<method name="space_get_feature">
+			<return type="int" />
+			<param index="0" name="space" type="RID" />
+			<param index="1" name="feature" type="int" enum="PhysicsServer3D.SpaceFeature" />
+			<description>
+				Returns an [enum SpaceFeatureSupport] constant describing how well the active physics backend supports the requested [param feature] for the given [param space].
+				Backend support levels:
+				| Backend | [constant FEATURE_STATE_SNAPSHOT] |
+				|---|---|
+				| GodotPhysics3D | [constant SPACE_FEATURE_PARTIAL] |
+				| Jolt Physics | [constant SPACE_FEATURE_FULL] |
+				[b]Note:[/b] Must be called from the main thread.
+			</description>
+		</method>
+		<method name="space_reset">
+			<return type="void" />
+			<param index="0" name="space" type="RID" />
+			<description>
+				Detaches all bodies, areas, and soft bodies from [param space] without freeing their [RID]s. All handles remain valid and can be re-added to the same or a different space afterwards.
+				[b]Note:[/b] Joints are not automatically removed. Remove joints manually before calling this method to avoid dangling references.
+				[b]Note:[/b] Must be called from the main thread.
+				[codeblocks]
+				[gdscript]
+				var space = PhysicsServer3D.space_create()
+				PhysicsServer3D.space_set_active(space, true)
+				var body = PhysicsServer3D.body_create()
+				PhysicsServer3D.body_set_space(body, space)
+				PhysicsServer3D.space_reset(space)
+				# body is now detached; space RID is still valid.
+				[/gdscript]
+				[csharp]
+				var space = PhysicsServer3D.SpaceCreate();
+				PhysicsServer3D.SpaceSetActive(space, true);
+				var body = PhysicsServer3D.BodyCreate();
+				PhysicsServer3D.BodySetSpace(body, space);
+				PhysicsServer3D.SpaceReset(space);
+				// body is now detached; space RID is still valid.
+				[/csharp]
+				[/codeblocks]
+			</description>
+		</method>
+		<method name="space_restore_state">
+			<return type="bool" />
+			<param index="0" name="space" type="RID" />
+			<param index="1" name="state" type="PackedByteArray" />
+			<description>
+				Restores a physics space to the state captured by [method space_save_state]. Returns [code]true[/code] on success, or [code]false[/code] if [param state] is malformed, was produced by a different backend or dimension, or if the backend's restore operation fails internally.
+				The restore is transactional: the blob is fully validated before any live state is mutated. If validation fails the space is left untouched.
+				[b]Note:[/b] GodotPhysics3D only restores body/area transforms and velocities. Contact manifolds and collision caches are not preserved ([constant SPACE_FEATURE_PARTIAL]). Jolt Physics restores the complete simulation state ([constant SPACE_FEATURE_FULL]).
+				[b]Note:[/b] Bodies and areas must already exist in the space. If a RID recorded in the blob is no longer present, that object is silently skipped.
+				[b]Note:[/b] Must be called from the main thread.
+				[codeblocks]
+				[gdscript]
+				var space = PhysicsServer3D.space_create()
+				PhysicsServer3D.space_set_active(space, true)
+				var blob: PackedByteArray = PhysicsServer3D.space_save_state(space)
+				# ... simulate ...
+				var ok: bool = PhysicsServer3D.space_restore_state(space, blob)
+				assert(ok)
+				[/gdscript]
+				[csharp]
+				var space = PhysicsServer3D.SpaceCreate();
+				PhysicsServer3D.SpaceSetActive(space, true);
+				byte[] blob = PhysicsServer3D.SpaceSaveState(space);
+				// ... simulate ...
+				bool ok = PhysicsServer3D.SpaceRestoreState(space, blob);
+				GD.Assert(ok);
+				[/csharp]
+				[/codeblocks]
+			</description>
+		</method>
+		<method name="space_save_state">
+			<return type="PackedByteArray" />
+			<param index="0" name="space" type="RID" />
+			<description>
+				Serializes the current state of [param space] into an opaque binary blob that can later be passed to [method space_restore_state]. Returns an empty [PackedByteArray] on failure (for example, if [param space] is invalid or the active backend does not support snapshots).
+				[b]Note:[/b] GodotPhysics3D serializes body/area transforms and velocities only. Contact manifolds and collision caches are not captured ([constant SPACE_FEATURE_PARTIAL]). Jolt Physics captures the complete simulation state ([constant SPACE_FEATURE_FULL]).
+				[b]Note:[/b] Must be called from the main thread.
+				[codeblocks]
+				[gdscript]
+				var space = PhysicsServer3D.space_create()
+				PhysicsServer3D.space_set_active(space, true)
+				var blob: PackedByteArray = PhysicsServer3D.space_save_state(space)
+				[/gdscript]
+				[csharp]
+				var space = PhysicsServer3D.SpaceCreate();
+				PhysicsServer3D.SpaceSetActive(space, true);
+				byte[] blob = PhysicsServer3D.SpaceSaveState(space);
+				[/csharp]
+				[/codeblocks]
+			</description>
+		</method>
 		<method name="sphere_shape_create">
 			<return type="RID" />
 			<description>
@@ -1948,6 +2040,18 @@
 		<constant name="BODY_AXIS_ANGULAR_Y" value="16" enum="BodyAxis">
 		</constant>
 		<constant name="BODY_AXIS_ANGULAR_Z" value="32" enum="BodyAxis">
+		</constant>
+		<constant name="FEATURE_STATE_SNAPSHOT" value="0" enum="SpaceFeature">
+			Feature flag for state snapshot support. Pass this to [method space_get_feature] to query whether the active backend can save and restore the complete simulation state via [method space_save_state] and [method space_restore_state].
+		</constant>
+		<constant name="SPACE_FEATURE_NONE" value="0" enum="SpaceFeatureSupport">
+			The active backend does not support this feature at all. [method space_save_state] will return an empty array and [method space_restore_state] will return [code]false[/code].
+		</constant>
+		<constant name="SPACE_FEATURE_PARTIAL" value="1" enum="SpaceFeatureSupport">
+			The active backend partially supports this feature. For [constant FEATURE_STATE_SNAPSHOT], GodotPhysics serializes body and area transforms and velocities, but does not preserve contact manifolds or collision caches. The simulation may behave slightly differently after a restore compared to a never-interrupted run.
+		</constant>
+		<constant name="SPACE_FEATURE_FULL" value="2" enum="SpaceFeatureSupport">
+			The active backend fully supports this feature. For [constant FEATURE_STATE_SNAPSHOT], Jolt Physics captures and restores the complete simulation state including all internal caches, producing a bit-exact replay.
 		</constant>
 	</constants>
 </class>

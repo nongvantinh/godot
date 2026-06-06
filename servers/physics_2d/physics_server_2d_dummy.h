@@ -345,6 +345,10 @@ public:
 
 	virtual void space_step(RID p_space, real_t p_delta) override {}
 	virtual void space_flush_queries(RID p_space) override {}
+	virtual PackedByteArray space_save_state(RID p_space) override { return PackedByteArray(); }
+	virtual bool space_restore_state(RID p_space, const PackedByteArray &p_state) override { return false; }
+	virtual void space_reset(RID p_space) override {}
+	virtual int space_get_feature(RID p_space, SpaceFeature p_feature) const override { return SPACE_FEATURE_NONE; }
 
 	virtual void finish() override {
 		memdelete(body_state_dummy);

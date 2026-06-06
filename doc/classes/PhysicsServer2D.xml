@@ -1027,6 +1027,96 @@
 				[/codeblocks]
 			</description>
 		</method>
+		<method name="space_get_feature">
+			<return type="int" />
+			<param index="0" name="space" type="RID" />
+			<param index="1" name="feature" type="int" enum="PhysicsServer2D.SpaceFeature" />
+			<description>
+				Returns a [enum SpaceFeatureSupport] constant describing how well the active 2D physics backend supports the requested [param feature] for the given [param space].
+				Backend support levels:
+				| Backend | [constant FEATURE_STATE_SNAPSHOT] |
+				|---|---|
+				| GodotPhysics2D | [constant SPACE_FEATURE_PARTIAL] |
+				[b]Note:[/b] Must be called from the main thread.
+			</description>
+		</method>
+		<method name="space_reset">
+			<return type="void" />
+			<param index="0" name="space" type="RID" />
+			<description>
+				Detaches all bodies and areas from [param space] without freeing their [RID]s. All handles remain valid and can be re-added to the same or a different space afterwards.
+				[b]Note:[/b] Must be called from the main thread.
+				[codeblocks]
+				[gdscript]
+				var space = PhysicsServer2D.space_create()
+				PhysicsServer2D.space_set_active(space, true)
+				var body = PhysicsServer2D.body_create()
+				PhysicsServer2D.body_set_space(body, space)
+				PhysicsServer2D.space_reset(space)
+				# body is now detached; space RID is still valid.
+				[/gdscript]
+				[csharp]
+				var space = PhysicsServer2D.SpaceCreate();
+				PhysicsServer2D.SpaceSetActive(space, true);
+				var body = PhysicsServer2D.BodyCreate();
+				PhysicsServer2D.BodySetSpace(body, space);
+				PhysicsServer2D.SpaceReset(space);
+				// body is now detached; space RID is still valid.
+				[/csharp]
+				[/codeblocks]
+			</description>
+		</method>
+		<method name="space_restore_state">
+			<return type="bool" />
+			<param index="0" name="space" type="RID" />
+			<param index="1" name="state" type="PackedByteArray" />
+			<description>
+				Restores a physics space to the state captured by [method space_save_state]. Returns [code]true[/code] on success, or [code]false[/code] if [param state] is malformed, was produced by a different backend or dimension, or if the backend's restore operation fails internally.
+				The restore is transactional: the blob is fully validated before any live state is mutated. If validation fails the space is left untouched.
+				[b]Note:[/b] GodotPhysics2D only restores body/area transforms and velocities. Contact manifolds and collision caches are not preserved ([constant SPACE_FEATURE_PARTIAL]).
+				[b]Note:[/b] Bodies and areas must already exist in the space. If a RID recorded in the blob is no longer present, that object is silently skipped.
+				[b]Note:[/b] Must be called from the main thread.
+				[codeblocks]
+				[gdscript]
+				var space = PhysicsServer2D.space_create()
+				PhysicsServer2D.space_set_active(space, true)
+				var blob: PackedByteArray = PhysicsServer2D.space_save_state(space)
+				# ... simulate ...
+				var ok: bool = PhysicsServer2D.space_restore_state(space, blob)
+				assert(ok)
+				[/gdscript]
+				[csharp]
+				var space = PhysicsServer2D.SpaceCreate();
+				PhysicsServer2D.SpaceSetActive(space, true);
+				byte[] blob = PhysicsServer2D.SpaceSaveState(space);
+				// ... simulate ...
+				bool ok = PhysicsServer2D.SpaceRestoreState(space, blob);
+				GD.Assert(ok);
+				[/csharp]
+				[/codeblocks]
+			</description>
+		</method>
+		<method name="space_save_state">
+			<return type="PackedByteArray" />
+			<param index="0" name="space" type="RID" />
+			<description>
+				Serializes the current state of [param space] into an opaque binary blob that can later be passed to [method space_restore_state]. Returns an empty [PackedByteArray] on failure (for example, if [param space] is invalid or the active backend does not support snapshots).
+				[b]Note:[/b] GodotPhysics2D serializes body/area transforms and velocities only. Contact manifolds and collision caches are not captured ([constant SPACE_FEATURE_PARTIAL]).
+				[b]Note:[/b] Must be called from the main thread.
+				[codeblocks]
+				[gdscript]
+				var space = PhysicsServer2D.space_create()
+				PhysicsServer2D.space_set_active(space, true)
+				var blob: PackedByteArray = PhysicsServer2D.space_save_state(space)
+				[/gdscript]
+				[csharp]
+				var space = PhysicsServer2D.SpaceCreate();
+				PhysicsServer2D.SpaceSetActive(space, true);
+				byte[] blob = PhysicsServer2D.SpaceSaveState(space);
+				[/csharp]
+				[/codeblocks]
+			</description>
+		</method>
 		<method name="world_boundary_shape_create">
 			<return type="RID" />
 			<description>
@@ -1277,6 +1367,18 @@
 		</constant>
 		<constant name="INFO_ISLAND_COUNT" value="2" enum="ProcessInfo">
 			Constant to get the number of space regions where a collision could occur.
+		</constant>
+		<constant name="FEATURE_STATE_SNAPSHOT" value="0" enum="SpaceFeature">
+			Feature flag for state snapshot support. Pass this to [method space_get_feature] to query whether the active 2D backend can save and restore the complete simulation state via [method space_save_state] and [method space_restore_state].
+		</constant>
+		<constant name="SPACE_FEATURE_NONE" value="0" enum="SpaceFeatureSupport">
+			The active backend does not support this feature at all. [method space_save_state] will return an empty array and [method space_restore_state] will return [code]false[/code].
+		</constant>
+		<constant name="SPACE_FEATURE_PARTIAL" value="1" enum="SpaceFeatureSupport">
+			The active backend partially supports this feature. For [constant FEATURE_STATE_SNAPSHOT], GodotPhysics2D serializes body and area transforms and velocities, but does not preserve contact manifolds or collision caches. The simulation may behave slightly differently after a restore compared to a never-interrupted run.
+		</constant>
+		<constant name="SPACE_FEATURE_FULL" value="2" enum="SpaceFeatureSupport">
+			The active backend fully supports this feature. Currently no 2D backend reaches this level; reserved for future backends.
 		</constant>
 	</constants>
 </class>

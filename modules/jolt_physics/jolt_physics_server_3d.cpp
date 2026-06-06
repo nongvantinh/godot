@@ -36,6 +36,7 @@
 #include "joints/jolt_joint_3d.h"
 #include "joints/jolt_pin_joint_3d.h"
 #include "joints/jolt_slider_joint_3d.h"
+#include "misc/jolt_stream_wrappers.h"
 #include "objects/jolt_area_3d.h"
 #include "objects/jolt_body_3d.h"
 #include "objects/jolt_soft_body_3d.h"
@@ -52,6 +53,8 @@
 #include "spaces/jolt_physics_direct_space_state_3d.h"
 #include "spaces/jolt_space_3d.h"
 #include "spaces/jolt_temp_allocator.h"
+
+#include "core/io/marshalls.h"
 
 JoltPhysicsServer3D::JoltPhysicsServer3D(bool p_on_separate_thread) :
 		on_separate_thread(p_on_separate_thread) {
@@ -1658,6 +1661,217 @@ void JoltPhysicsServer3D::space_flush_queries(RID p_space) {
 	flushing_queries = true;
 	space->call_queries();
 	flushing_queries = false;
+}
+
+// Blob format constants shared by save/restore.
+// Layout: [magic:4][dim:1][version:1][backend:1][reserved:1][section_count:4]
+// Sections: [tag:2][length:4][payload:length]
+static const uint8_t GPSS_MAGIC[4] = { 'G', 'P', 'S', 'S' };
+static const uint8_t GPSS_DIM_3D = 3;
+static const uint8_t GPSS_VERSION = 1;
+static const uint8_t GPSS_BACKEND_JOLT = 1;
+static const uint16_t GPSS_SECTION_BODIES = 2;
+static const int GPSS_HEADER_SIZE = 12; // magic(4)+dim(1)+version(1)+backend(1)+reserved(1)+section_count(4)
+static const int GPSS_SECTION_HEADER_SIZE = 6; // tag(2)+length(4)
+
+PackedByteArray JoltPhysicsServer3D::space_save_state(RID p_space) {
+	JoltSpace3D *space = space_owner.get_or_null(p_space);
+	ERR_FAIL_NULL_V_MSG(space, PackedByteArray(), "space_save_state: invalid space RID.");
+
+	// Serialize the Jolt physics system into a raw byte buffer.
+	PackedByteArray jolt_payload;
+	JoltMemoryStateRecorderOut stream_out(jolt_payload);
+	space->save_state(stream_out);
+	if (stream_out.IsFailed()) {
+		ERR_PRINT("space_save_state: Jolt serialization failed.");
+		return PackedByteArray();
+	}
+
+	// Build the GPSS blob.
+	// Header: magic(4) + dim(1) + version(1) + backend(1) + reserved(1) + section_count(4) = 12 bytes
+	// Section: tag(2) + length(4) + payload
+	uint32_t jolt_payload_size = (uint32_t)jolt_payload.size();
+	int total_size = GPSS_HEADER_SIZE + GPSS_SECTION_HEADER_SIZE + (int)jolt_payload_size;
+
+	PackedByteArray blob;
+	blob.resize(total_size);
+	uint8_t *w = blob.ptrw();
+
+	// Magic
+	memcpy(w, GPSS_MAGIC, 4);
+	w[4] = GPSS_DIM_3D;
+	w[5] = GPSS_VERSION;
+	w[6] = GPSS_BACKEND_JOLT;
+	w[7] = 0; // reserved
+
+	// section_count = 1
+	encode_uint32(1, w + 8);
+
+	// Section: BODIES
+	encode_uint16(GPSS_SECTION_BODIES, w + 12);
+	encode_uint32(jolt_payload_size, w + 14);
+
+	// Payload
+	if (jolt_payload_size > 0) {
+		memcpy(w + GPSS_HEADER_SIZE + GPSS_SECTION_HEADER_SIZE, jolt_payload.ptr(), jolt_payload_size);
+	}
+
+	return blob;
+}
+
+bool JoltPhysicsServer3D::space_restore_state(RID p_space, const PackedByteArray &p_state) {
+	JoltSpace3D *space = space_owner.get_or_null(p_space);
+	ERR_FAIL_NULL_V_MSG(space, false, "space_restore_state: invalid space RID.");
+
+	const uint8_t *r = p_state.ptr();
+	int64_t size = p_state.size();
+
+	// --- Structural validation (all checks before any mutation) ---
+
+	// 1. Buffer too small for header.
+	if (size < GPSS_HEADER_SIZE) {
+		WARN_PRINT("space_restore_state: blob too small for header.");
+		return false;
+	}
+
+	// 2. Wrong magic.
+	if (memcmp(r, GPSS_MAGIC, 4) != 0) {
+		WARN_PRINT("space_restore_state: wrong magic bytes.");
+		return false;
+	}
+
+	// 3. Dimension mismatch.
+	if (r[4] != GPSS_DIM_3D) {
+		WARN_PRINT("space_restore_state: dimension mismatch (blob is not a 3D space snapshot).");
+		return false;
+	}
+
+	// 4. Unsupported version.
+	if (r[5] != GPSS_VERSION) {
+		WARN_PRINT("space_restore_state: unsupported format version.");
+		return false;
+	}
+
+	// 5. Backend id mismatch.
+	if (r[6] != GPSS_BACKEND_JOLT) {
+		WARN_PRINT("space_restore_state: backend id mismatch (blob was not written by the Jolt backend).");
+		return false;
+	}
+
+	// 6. Reserved byte must be 0.
+	if (r[7] != 0) {
+		WARN_PRINT("space_restore_state: reserved byte is non-zero.");
+		return false;
+	}
+
+	uint32_t section_count = decode_uint32(r + 8);
+	int64_t pos = GPSS_HEADER_SIZE;
+
+	// Scan sections to find the BODIES section (validate all sections first).
+	int64_t bodies_payload_offset = -1;
+	uint32_t bodies_payload_size = 0;
+
+	for (uint32_t i = 0; i < section_count; i++) {
+		// 7. Section header must fit in remaining buffer.
+		if (pos + GPSS_SECTION_HEADER_SIZE > size) {
+			WARN_PRINT("space_restore_state: section header truncated.");
+			return false;
+		}
+		uint16_t tag = decode_uint16(r + pos);
+		uint32_t sec_len = decode_uint32(r + pos + 2);
+		pos += GPSS_SECTION_HEADER_SIZE;
+
+		// 7. Section payload must fit.
+		if ((int64_t)sec_len > size - pos) {
+			WARN_PRINT("space_restore_state: section length exceeds remaining buffer.");
+			return false;
+		}
+
+		if (tag == GPSS_SECTION_BODIES) {
+			bodies_payload_offset = pos;
+			bodies_payload_size = sec_len;
+		}
+		pos += (int64_t)sec_len;
+	}
+
+	// 10. Trailing bytes: there must not be unexpected bytes after sections.
+	// (Unknown tags with valid lengths are already skipped above — that's forward-compat.)
+	if (pos != size) {
+		WARN_PRINT("space_restore_state: trailing garbage after sections.");
+		return false;
+	}
+
+	if (bodies_payload_offset < 0) {
+		WARN_PRINT("space_restore_state: no BODIES section found in blob.");
+		return false;
+	}
+
+	// Build a sub-view PackedByteArray for the BODIES payload.
+	PackedByteArray payload_slice;
+	payload_slice.resize(bodies_payload_size);
+	memcpy(payload_slice.ptrw(), r + bodies_payload_offset, bodies_payload_size);
+
+	// 11. Feed to Jolt RestoreState.
+	JoltMemoryStateRecorderIn stream_in(payload_slice);
+	bool ok = space->restore_state(stream_in);
+	if (!ok) {
+		WARN_PRINT("space_restore_state: Jolt RestoreState returned false (internal inconsistency).");
+		return false;
+	}
+	if (stream_in.IsFailed()) {
+		WARN_PRINT("space_restore_state: Jolt stream read past buffer bounds.");
+		return false;
+	}
+
+	return true;
+}
+
+void JoltPhysicsServer3D::space_reset(RID p_space) {
+	JoltSpace3D *space = space_owner.get_or_null(p_space);
+	ERR_FAIL_NULL_MSG(space, "space_reset: invalid space RID.");
+
+	// Detach bodies. Collect first to avoid modifying the owner while iterating.
+	{
+		LocalVector<RID> rids = body_owner.get_owned_list();
+		for (const RID &rid : rids) {
+			JoltBody3D *body = body_owner.get_or_null(rid);
+			if (body && body->get_space() == space) {
+				body->set_space(nullptr);
+			}
+		}
+	}
+
+	// Detach areas (excluding the space's default area, which is internal).
+	{
+		LocalVector<RID> rids = area_owner.get_owned_list();
+		for (const RID &rid : rids) {
+			JoltArea3D *area = area_owner.get_or_null(rid);
+			if (area && area->get_space() == space && area != space->get_default_area()) {
+				area->set_space(nullptr);
+			}
+		}
+	}
+
+	// Detach soft bodies.
+	{
+		LocalVector<RID> rids = soft_body_owner.get_owned_list();
+		for (const RID &rid : rids) {
+			JoltSoftBody3D *sb = soft_body_owner.get_or_null(rid);
+			if (sb && sb->get_space() == space) {
+				sb->set_space(nullptr);
+			}
+		}
+	}
+
+	// Jolt joints are tied to bodies; detaching bodies above removes their constraints
+	// from the physics system. Joint RIDs remain valid (not freed) per the spec.
+}
+
+int JoltPhysicsServer3D::space_get_feature(RID p_space, SpaceFeature p_feature) const {
+	if (p_feature == FEATURE_STATE_SNAPSHOT) {
+		return SPACE_FEATURE_FULL;
+	}
+	return SPACE_FEATURE_NONE;
 }
 
 void JoltPhysicsServer3D::sync() {
