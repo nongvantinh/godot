@@ -58,7 +58,7 @@ TEST_SUITE("[PhysicsServer2D][SpaceState]") {
 		PhysicsServer2D *ps = PhysicsServer2D::get_singleton();
 		REQUIRE(ps != nullptr);
 		if (!is_dummy_server()) {
-			WARN("Test targets dummy server but a real backend is loaded — skipping.");
+			MESSAGE("Test targets dummy server but a real backend is loaded — skipping.");
 			return;
 		}
 		RID space = ps->space_create();
@@ -69,7 +69,7 @@ TEST_SUITE("[PhysicsServer2D][SpaceState]") {
 
 	TEST_CASE("[SceneTree][PhysicsServer2D] space_get_feature returns at-least-PARTIAL for real backend") {
 		if (is_dummy_server()) {
-			WARN("Skipping: dummy server.");
+			MESSAGE("Skipping: dummy server.");
 			return;
 		}
 		PhysicsServer2D *ps = PhysicsServer2D::get_singleton();
@@ -88,7 +88,7 @@ TEST_SUITE("[PhysicsServer2D][SpaceState]") {
 
 	TEST_CASE("[SceneTree][PhysicsServer2D] space_save_state returns non-empty blob for live space") {
 		if (is_dummy_server()) {
-			WARN("Skipping: dummy server.");
+			MESSAGE("Skipping: dummy server.");
 			return;
 		}
 		PhysicsServer2D *ps = PhysicsServer2D::get_singleton();
@@ -115,7 +115,7 @@ TEST_SUITE("[PhysicsServer2D][SpaceState]") {
 
 	TEST_CASE("[SceneTree][PhysicsServer2D] space_restore_state round-trip restores body state") {
 		if (is_dummy_server()) {
-			WARN("Skipping: dummy server.");
+			MESSAGE("Skipping: dummy server.");
 			return;
 		}
 		PhysicsServer2D *ps = PhysicsServer2D::get_singleton();
@@ -163,7 +163,7 @@ TEST_SUITE("[PhysicsServer2D][SpaceState]") {
 
 	TEST_CASE("[SceneTree][PhysicsServer2D] space_reset detaches all bodies without freeing RIDs") {
 		if (is_dummy_server()) {
-			WARN("Skipping: dummy server.");
+			MESSAGE("Skipping: dummy server.");
 			return;
 		}
 		PhysicsServer2D *ps = PhysicsServer2D::get_singleton();
@@ -201,7 +201,7 @@ TEST_SUITE("[PhysicsServer2D][SpaceState]") {
 	// This test FAILS against the iter-1 buggy reset (which detached everything).
 	TEST_CASE("[SceneTree][PhysicsServer2D] space_reset preserves infrastructure: space is functional after reset") {
 		if (is_dummy_server()) {
-			WARN("Skipping: dummy server.");
+			MESSAGE("Skipping: dummy server.");
 			return;
 		}
 		PhysicsServer2D *ps = PhysicsServer2D::get_singleton();
@@ -253,7 +253,7 @@ TEST_SUITE("[PhysicsServer2D][SpaceState]") {
 
 	TEST_CASE("[SceneTree][PhysicsServer2D] space_restore_state rejects empty blob") {
 		if (is_dummy_server()) {
-			WARN("Skipping: dummy server.");
+			MESSAGE("Skipping: dummy server.");
 			return;
 		}
 		PhysicsServer2D *ps = PhysicsServer2D::get_singleton();
@@ -267,7 +267,7 @@ TEST_SUITE("[PhysicsServer2D][SpaceState]") {
 
 	TEST_CASE("[SceneTree][PhysicsServer2D] space_restore_state rejects wrong magic") {
 		if (is_dummy_server()) {
-			WARN("Skipping: dummy server.");
+			MESSAGE("Skipping: dummy server.");
 			return;
 		}
 		PhysicsServer2D *ps = PhysicsServer2D::get_singleton();
@@ -289,7 +289,7 @@ TEST_SUITE("[PhysicsServer2D][SpaceState]") {
 		// This tests that a 3D blob is rejected by the 2D server.
 		// We manually craft a minimal blob with dim=3 and valid magic/version/backend.
 		if (is_dummy_server()) {
-			WARN("Skipping: dummy server.");
+			MESSAGE("Skipping: dummy server.");
 			return;
 		}
 		PhysicsServer2D *ps = PhysicsServer2D::get_singleton();
@@ -310,7 +310,7 @@ TEST_SUITE("[PhysicsServer2D][SpaceState]") {
 
 	TEST_CASE("[SceneTree][PhysicsServer2D] space_restore_state rejects section length exceeding buffer") {
 		if (is_dummy_server()) {
-			WARN("Skipping: dummy server.");
+			MESSAGE("Skipping: dummy server.");
 			return;
 		}
 		PhysicsServer2D *ps = PhysicsServer2D::get_singleton();
@@ -339,7 +339,7 @@ TEST_SUITE("[PhysicsServer2D][SpaceState]") {
 
 	TEST_CASE("[SceneTree][PhysicsServer2D] space_restore_state rejects wrong version") {
 		if (is_dummy_server()) {
-			WARN("Skipping: dummy server.");
+			MESSAGE("Skipping: dummy server.");
 			return;
 		}
 		PhysicsServer2D *ps = PhysicsServer2D::get_singleton();
@@ -363,7 +363,7 @@ TEST_SUITE("[PhysicsServer2D][SpaceState]") {
 
 	TEST_CASE("[SceneTree][PhysicsServer2D] space_restore_state rejects non-zero reserved byte") {
 		if (is_dummy_server()) {
-			WARN("Skipping: dummy server.");
+			MESSAGE("Skipping: dummy server.");
 			return;
 		}
 		PhysicsServer2D *ps = PhysicsServer2D::get_singleton();
@@ -387,7 +387,7 @@ TEST_SUITE("[PhysicsServer2D][SpaceState]") {
 
 	TEST_CASE("[SceneTree][PhysicsServer2D] space_restore_state rejects truncated blob") {
 		if (is_dummy_server()) {
-			WARN("Skipping: dummy server.");
+			MESSAGE("Skipping: dummy server.");
 			return;
 		}
 		PhysicsServer2D *ps = PhysicsServer2D::get_singleton();
@@ -424,7 +424,7 @@ TEST_SUITE("[PhysicsServer2D][SpaceState]") {
 
 	TEST_CASE("[SceneTree][PhysicsServer2D] space_restore_state rejects backend id mismatch") {
 		if (is_dummy_server()) {
-			WARN("Skipping: dummy server.");
+			MESSAGE("Skipping: dummy server.");
 			return;
 		}
 		PhysicsServer2D *ps = PhysicsServer2D::get_singleton();

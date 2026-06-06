@@ -201,6 +201,15 @@ void JoltPhysicsServer3D::space_set_active(RID p_space, bool p_active) {
 	JoltSpace3D *space = space_owner.get_or_null(p_space);
 	ERR_FAIL_NULL(space);
 
+	// Symmetric counterpart to the space_make_isolated()/space_step_isolated() guards (AC8):
+	// an isolated space is stepped thread-direct via space_step_isolated() and must never
+	// also be driven by the main-thread server loop. Allowing both would run two
+	// PhysicsSystem::Update() calls against the same space concurrently — the exact race the
+	// per-space JobSystem/TempAllocator split was introduced to avoid.
+	ERR_FAIL_COND_MSG(p_active && space->get_is_isolated(),
+			"Cannot activate an isolated space: it is stepped thread-direct via space_step_isolated() "
+			"and must not also be added to active_spaces. (AC8)");
+
 	if (p_active) {
 		space->set_active(true);
 		active_spaces.insert(space);
@@ -1645,6 +1654,12 @@ void JoltPhysicsServer3D::space_step(RID p_space, real_t p_delta) {
 	JoltSpace3D *space = space_owner.get_or_null(p_space);
 	ERR_FAIL_NULL(space);
 
+	// #3 delta guard: a caller-supplied delta reaches the Jolt solver here (and via
+	// space_step_safe/space_step_batch, which funnel through this method). Reject
+	// NaN/Inf/negative before it hits PhysicsSystem::Update.
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_delta) || p_delta < 0,
+			"space_step: delta must be finite and non-negative.");
+
 	job_system->pre_step();
 	space->step((float)p_delta);
 	job_system->post_step();
@@ -1661,6 +1676,40 @@ void JoltPhysicsServer3D::space_flush_queries(RID p_space) {
 	flushing_queries = true;
 	space->call_queries();
 	flushing_queries = false;
+}
+
+void JoltPhysicsServer3D::space_make_isolated(RID p_space) {
+	JoltSpace3D *space = space_owner.get_or_null(p_space);
+	ERR_FAIL_NULL(space);
+	ERR_FAIL_COND_MSG(active_spaces.has(space),
+			"space_make_isolated must not be called on a space that has been added to active_spaces "
+			"(i.e. passed to space_set_active(true)). (AC8)");
+	space->make_isolated();
+}
+
+void JoltPhysicsServer3D::space_step_isolated(RID p_space, real_t p_delta) {
+	// D2 (GH-15): thread-direct step for isolated Jolt spaces.
+	// This method bypasses WrapMT entirely and is callable from a worker thread.
+	// It MUST NOT be called on live (non-isolated) spaces — that would bypass the
+	// WrapMT main-thread guard that protects the live command queue (AC8).
+	ERR_FAIL_COND_MSG(!active, "JoltPhysicsServer3D is not active.");
+
+	JoltSpace3D *space = space_owner.get_or_null(p_space);
+	ERR_FAIL_NULL(space);
+
+	ERR_FAIL_COND_MSG(!space->get_is_isolated(),
+			"space_step_isolated must only be called on isolated spaces (never in active_spaces). "
+			"Call JoltSpace3D::make_isolated() before using this path. (AC8)");
+
+	// #3 delta guard: this path bypasses space_step(), so it needs its own check —
+	// reject NaN/Inf/negative before space->step() reaches PhysicsSystem::Update.
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_delta) || p_delta < 0,
+			"space_step_isolated: delta must be finite and non-negative.");
+
+	// The space owns its per-space JobSystemSingleThreaded and TempAllocatorMalloc —
+	// no shared-static job list, no shared bump-state temp allocator.
+	// No pre_step()/post_step() from the server-shared JoltJobSystem.
+	space->step((float)p_delta);
 }
 
 // Blob format constants shared by save/restore.
@@ -1914,13 +1963,15 @@ bool JoltPhysicsServer3D::space_clone_state(RID p_src_space, RID p_dst_space) {
 	}
 
 	// Stage all source state before writing any destination body (no partial write).
-	struct BodyState {
+	// Named StagedBodyState (not BodyState) to avoid shadowing the inherited
+	// PhysicsServer3D::BodyState enum (-Wshadow).
+	struct StagedBodyState {
 		Transform3D transform;
 		Vector3 linear_velocity;
 		Vector3 angular_velocity;
 		bool sleeping;
 	};
-	LocalVector<BodyState> staged;
+	LocalVector<StagedBodyState> staged;
 	staged.resize(src_bodies.size());
 	for (uint32_t i = 0; i < src_bodies.size(); i++) {
 		staged[i].transform = src_bodies[i]->get_transform_unscaled();

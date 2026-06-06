@@ -618,6 +618,7 @@ public:
 	virtual void space_step(RID p_space, real_t p_delta) = 0;
 	virtual void space_flush_queries(RID p_space) = 0;
 	virtual void space_step_safe(RID p_space, real_t p_delta);
+	virtual void space_step_batch(const TypedArray<RID> &p_spaces, real_t p_delta);
 
 	enum SpaceFeature {
 		FEATURE_STATE_SNAPSHOT = 0,
