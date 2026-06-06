@@ -615,6 +615,10 @@ public:
 	virtual void end_sync() = 0;
 	virtual void finish() = 0;
 
+	virtual void space_step(RID p_space, real_t p_delta) = 0;
+	virtual void space_flush_queries(RID p_space) = 0;
+	virtual void space_step_safe(RID p_space, real_t p_delta);
+
 	virtual bool is_flushing_queries() const = 0;
 
 	enum ProcessInfo {

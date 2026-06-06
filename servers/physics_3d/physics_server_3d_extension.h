@@ -546,6 +546,9 @@ public:
 	EXBIND0(end_sync)
 	EXBIND0(finish)
 
+	EXBIND2(space_step, RID, real_t)
+	EXBIND1(space_flush_queries, RID)
+
 	EXBIND0RC(bool, is_flushing_queries)
 	EXBIND1R(int, get_process_info, ProcessInfo)
 

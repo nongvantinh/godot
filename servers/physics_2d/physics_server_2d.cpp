@@ -33,6 +33,7 @@
 
 #include "core/config/project_settings.h"
 #include "core/object/class_db.h"
+#include "core/os/thread.h"
 #include "core/variant/typed_array.h"
 
 PhysicsServer2D *PhysicsServer2D::singleton = nullptr;
@@ -647,6 +648,9 @@ void PhysicsServer2D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("space_set_param", "space", "param", "value"), &PhysicsServer2D::space_set_param);
 	ClassDB::bind_method(D_METHOD("space_get_param", "space", "param"), &PhysicsServer2D::space_get_param);
 	ClassDB::bind_method(D_METHOD("space_get_direct_state", "space"), &PhysicsServer2D::space_get_direct_state);
+	ClassDB::bind_method(D_METHOD("space_step", "space", "delta"), &PhysicsServer2D::space_step);
+	ClassDB::bind_method(D_METHOD("space_flush_queries", "space"), &PhysicsServer2D::space_flush_queries);
+	ClassDB::bind_method(D_METHOD("space_step_safe", "space", "delta"), &PhysicsServer2D::space_step_safe);
 
 	ClassDB::bind_method(D_METHOD("area_create"), &PhysicsServer2D::area_create);
 	ClassDB::bind_method(D_METHOD("area_set_space", "area", "space"), &PhysicsServer2D::area_set_space);
@@ -898,6 +902,14 @@ void PhysicsServer2D::_bind_methods() {
 	BIND_ENUM_CONSTANT(INFO_ACTIVE_OBJECTS);
 	BIND_ENUM_CONSTANT(INFO_COLLISION_PAIRS);
 	BIND_ENUM_CONSTANT(INFO_ISLAND_COUNT);
+}
+
+void PhysicsServer2D::space_step_safe(RID p_space, real_t p_delta) {
+	ERR_FAIL_COND_MSG(!Thread::is_main_thread(), "space_step_safe must be called from the main thread.");
+	sync();
+	space_flush_queries(p_space);
+	space_step(p_space, p_delta);
+	end_sync();
 }
 
 PhysicsServer2D::PhysicsServer2D() {
