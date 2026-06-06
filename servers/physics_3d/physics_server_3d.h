@@ -826,6 +826,7 @@ public:
 	enum SpaceFeature {
 		FEATURE_STATE_SNAPSHOT = 0,
 		FEATURE_STATE_CLONE = 1,
+		FEATURE_MANUAL_STEP = 2,
 	};
 
 	enum SpaceFeatureSupport {

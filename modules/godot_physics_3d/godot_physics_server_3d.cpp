@@ -2129,6 +2129,9 @@ int GodotPhysicsServer3D::space_get_feature(RID p_space, SpaceFeature p_feature)
 	if (p_feature == FEATURE_STATE_CLONE) {
 		return SPACE_FEATURE_PARTIAL;
 	}
+	if (p_feature == FEATURE_MANUAL_STEP) {
+		return SPACE_FEATURE_FULL;
+	}
 	return SPACE_FEATURE_NONE;
 }
 

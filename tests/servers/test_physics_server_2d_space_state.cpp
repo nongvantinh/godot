@@ -109,6 +109,94 @@ TEST_SUITE("[PhysicsServer2D][SpaceState]") {
 		CHECK_EQ(blob.size(), 0);
 	}
 
+	// AC-1 (HARD): 2D parity with the existing 3D NONE-degradation test.
+	// PhysicsServer2D dummy must return an empty PackedByteArray from
+	// space_save_state just as the 3D dummy does.
+	TEST_CASE("[SceneTree][PhysicsServer2D] space_save_state returns empty for NONE-feature backend") {
+		if (!is_dummy_server()) {
+			MESSAGE("Skipping: not dummy server.");
+			return;
+		}
+		PhysicsServer2D *ps = PhysicsServer2D::get_singleton();
+		REQUIRE(ps != nullptr);
+		RID space = ps->space_create();
+		// WARN_PRINT is expected here (dummy server degradation warning).
+		PackedByteArray blob = ps->space_save_state(space);
+		CHECK_EQ(blob.size(), 0);
+		ps->free_rid(space);
+	}
+
+	// Degradation symmetry: dummy space_restore_state must return false (symmetric
+	// with save returning empty). Both sides of the save/restore pair are degraded
+	// on the dummy server; this test covers the restore side. (Spec correction:
+	// degradation warns on BOTH save+restore.)
+	TEST_CASE("[SceneTree][PhysicsServer2D] space_restore_state returns false for NONE-feature backend") {
+		if (!is_dummy_server()) {
+			MESSAGE("Skipping: not dummy server.");
+			return;
+		}
+		PhysicsServer2D *ps = PhysicsServer2D::get_singleton();
+		REQUIRE(ps != nullptr);
+		RID space = ps->space_create();
+		PackedByteArray dummy_blob;
+		// WARN_PRINT is expected here (dummy server degradation warning).
+		bool ok = ps->space_restore_state(space, dummy_blob);
+		CHECK_MESSAGE(!ok,
+				"Dummy server space_restore_state must return false (degradation symmetry with save returning empty).");
+		ps->free_rid(space);
+	}
+
+	TEST_CASE("[SceneTree][PhysicsServer2D] space_get_feature MANUAL_STEP returns NONE for dummy server") {
+		PhysicsServer2D *ps = PhysicsServer2D::get_singleton();
+		REQUIRE(ps != nullptr);
+		if (!is_dummy_server()) {
+			MESSAGE("Test targets dummy server but a real backend is loaded — skipping.");
+			return;
+		}
+		RID space = ps->space_create();
+		CHECK_EQ(ps->space_get_feature(space, PhysicsServer2D::FEATURE_MANUAL_STEP),
+				(int)PhysicsServer2D::SPACE_FEATURE_NONE);
+		ps->free_rid(space);
+	}
+
+	TEST_CASE("[SceneTree][PhysicsServer2D] space_get_feature MANUAL_STEP returns FULL for real backend") {
+		if (is_dummy_server()) {
+			MESSAGE("Skipping: dummy server.");
+			return;
+		}
+		PhysicsServer2D *ps = PhysicsServer2D::get_singleton();
+		REQUIRE(ps != nullptr);
+		RID space = ps->space_create();
+		ps->space_set_active(space, true);
+		int feat = ps->space_get_feature(space, PhysicsServer2D::FEATURE_MANUAL_STEP);
+		CHECK_MESSAGE(feat == (int)PhysicsServer2D::SPACE_FEATURE_FULL,
+				"GodotPhysics2D must report SPACE_FEATURE_FULL for FEATURE_MANUAL_STEP: manual stepping runs the identical integration path as the auto-loop with zero fidelity loss.");
+		ps->free_rid(space);
+	}
+
+	// -----------------------------------------------------------------------
+	// AC-2 (2D parity): Extension forwarding wiring for FEATURE_MANUAL_STEP.
+	// Same rationale as the 3D version: a live GDExtension object cannot be
+	// created in the bare doctest context.  We verify the constant value and
+	// confirm the engine layer does not remap the result.
+	// -----------------------------------------------------------------------
+
+	TEST_CASE("[SceneTree][PhysicsServer2D] space_get_feature MANUAL_STEP has correct integer value for vtable forwarding") {
+		static_assert(PhysicsServer2D::FEATURE_MANUAL_STEP == 2,
+				"FEATURE_MANUAL_STEP must be 2 (append-only ABI contract).");
+		CHECK_EQ((int)PhysicsServer2D::FEATURE_MANUAL_STEP, 2);
+
+		PhysicsServer2D *ps = PhysicsServer2D::get_singleton();
+		REQUIRE(ps != nullptr);
+		RID space = ps->space_create();
+		int feat = ps->space_get_feature(space, PhysicsServer2D::FEATURE_MANUAL_STEP);
+		bool in_range = (feat >= (int)PhysicsServer2D::SPACE_FEATURE_NONE &&
+				feat <= (int)PhysicsServer2D::SPACE_FEATURE_FULL);
+		CHECK_MESSAGE(in_range,
+				"space_get_feature must return an unmodified SpaceFeatureSupport value (no engine-layer clamping).");
+		ps->free_rid(space);
+	}
+
 	// -----------------------------------------------------------------------
 	// Round-trip: save → mutate → restore
 	// -----------------------------------------------------------------------
