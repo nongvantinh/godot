@@ -54,6 +54,14 @@
 				The engine will already do this itself at key execution points (at least once per frame). However, this can be useful in advanced cases where you want precise control over the timing of event handling.
 			</description>
 		</method>
+		<method name="get_action_edge_fingerprint" qualifiers="const">
+			<return type="int" />
+			<description>
+				Returns a fingerprint value that changes whenever an input action edge (a just-pressed or just-released transition) is consumed by the engine during a physics tick. Specifically, the fingerprint is the sum of all per-action [i]pressed_physics_frame[/i] and [i]released_physics_frame[/i] stamps across all tracked actions.
+				Use this to verify that isolated manual-step operations (such as [method PhysicsServer3D.space_step] on a clone space) do [b]not[/b] consume input action edges — the fingerprint must be identical before and after such calls. [method Engine.physics_iteration] with [code]dry_run = false[/code] [b]will[/b] consume edges and thus change the fingerprint.
+				This method is primarily intended for testing and debugging the manual physics stepping tier split.
+			</description>
+		</method>
 		<method name="get_accelerometer" qualifiers="const">
 			<return type="Vector3" />
 			<description>

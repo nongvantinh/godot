@@ -996,6 +996,7 @@
 			<param index="1" name="delta" type="float" />
 			<description>
 				Advances the physics simulation for the given [param space] by [param delta] seconds. This is a low-level primitive that steps exactly one space on demand. The caller is responsible for ensuring that the command queue has been drained and the physics thread is idle before calling this method (e.g. by calling [method space_step_safe], which manages the synchronization automatically). Must be called from the main thread.
+				[b]Physics interpolation — caller-owned flush:[/b] when [member ProjectSettings.physics/common/physics_interpolation] is enabled, this method deliberately does [b]not[/b] flush the scene-side fixed-timestep-interpolation (FTI) pumps. The FTI state is owned by the [SceneTree] layer, not the physics server, so coupling [method space_step] to the [SceneTree] would break isolated spaces (created without a scene tree). After calling [method space_step] on nodes that participate in physics interpolation, the caller is responsible for flushing interpolation state using [method Node.reset_physics_interpolation] on the affected nodes, or by triggering a [SceneTree] interpolation tick. The high-level [method Engine.physics_iteration] path already performs this flush automatically via [code]SceneTree.iteration_prepare()[/code] and does not require any caller action.
 			</description>
 		</method>
 		<method name="space_flush_queries">
@@ -1025,6 +1026,23 @@
 				PhysicsServer2D.SpaceStepSafe(space, 1.0f / 60.0f);
 				[/csharp]
 				[/codeblocks]
+			</description>
+		</method>
+		<method name="space_set_debug_contacts">
+			<return type="void" />
+			<param index="0" name="space" type="RID" />
+			<param index="1" name="max_contacts" type="int" />
+			<description>
+				Sets the maximum number of contact points that will be collected per physics step for the given [param space]. Contact points are used to drive the physics debug overlay (collision contact visualisation). Call [method space_get_contact_count] after a step to read the collected count.
+				[b]Note:[/b] Must be called from the main thread.
+			</description>
+		</method>
+		<method name="space_get_contact_count">
+			<return type="int" />
+			<param index="0" name="space" type="RID" />
+			<description>
+				Returns the number of contact points collected during the last physics step for the given [param space]. The value is reset to zero at the start of each [method space_step] call. Use [method space_set_debug_contacts] to enable contact collection before calling this method.
+				[b]Note:[/b] Must be called from the main thread.
 			</description>
 		</method>
 		<method name="space_get_feature">
