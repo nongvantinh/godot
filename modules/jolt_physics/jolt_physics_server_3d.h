@@ -428,6 +428,9 @@ public:
 	virtual void flush_queries() override;
 	virtual bool is_flushing_queries() const override;
 
+	virtual void space_step(RID p_space, real_t p_delta) override;
+	virtual void space_flush_queries(RID p_space) override;
+
 	virtual int get_process_info(PhysicsServer3D::ProcessInfo p_process_info) override;
 
 	bool is_on_separate_thread() const { return on_separate_thread; }

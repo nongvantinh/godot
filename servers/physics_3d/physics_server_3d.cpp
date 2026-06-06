@@ -32,6 +32,7 @@
 
 #include "core/config/project_settings.h"
 #include "core/object/class_db.h"
+#include "core/os/thread.h"
 #include "core/variant/typed_array.h"
 
 void PhysicsServer3DRenderingServerHandler::set_vertex(int p_vertex_id, const Vector3 &p_vertex) {
@@ -722,6 +723,9 @@ void PhysicsServer3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("space_set_param", "space", "param", "value"), &PhysicsServer3D::space_set_param);
 	ClassDB::bind_method(D_METHOD("space_get_param", "space", "param"), &PhysicsServer3D::space_get_param);
 	ClassDB::bind_method(D_METHOD("space_get_direct_state", "space"), &PhysicsServer3D::space_get_direct_state);
+	ClassDB::bind_method(D_METHOD("space_step", "space", "delta"), &PhysicsServer3D::space_step);
+	ClassDB::bind_method(D_METHOD("space_flush_queries", "space"), &PhysicsServer3D::space_flush_queries);
+	ClassDB::bind_method(D_METHOD("space_step_safe", "space", "delta"), &PhysicsServer3D::space_step_safe);
 
 	ClassDB::bind_method(D_METHOD("area_create"), &PhysicsServer3D::area_create);
 	ClassDB::bind_method(D_METHOD("area_set_space", "area", "space"), &PhysicsServer3D::area_set_space);
@@ -1133,6 +1137,14 @@ void PhysicsServer3D::_bind_methods() {
 	BIND_ENUM_CONSTANT(BODY_AXIS_ANGULAR_Z);
 
 #endif
+}
+
+void PhysicsServer3D::space_step_safe(RID p_space, real_t p_delta) {
+	ERR_FAIL_COND_MSG(!Thread::is_main_thread(), "space_step_safe must be called from the main thread.");
+	sync();
+	space_flush_queries(p_space);
+	space_step(p_space, p_delta);
+	end_sync();
 }
 
 PhysicsServer3D::PhysicsServer3D() {

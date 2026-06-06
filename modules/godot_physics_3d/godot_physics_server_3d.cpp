@@ -1689,6 +1689,32 @@ void GodotPhysicsServer3D::step(real_t p_step) {
 	}
 }
 
+void GodotPhysicsServer3D::space_step(RID p_space, real_t p_delta) {
+	if (!active) {
+		return;
+	}
+
+	GodotSpace3D *space = space_owner.get_or_null(p_space);
+	ERR_FAIL_NULL(space);
+
+	_update_shapes();
+
+	stepper->step(space, p_delta);
+}
+
+void GodotPhysicsServer3D::space_flush_queries(RID p_space) {
+	if (!active) {
+		return;
+	}
+
+	GodotSpace3D *space = space_owner.get_or_null(p_space);
+	ERR_FAIL_NULL(space);
+
+	flushing_queries = true;
+	space->call_queries();
+	flushing_queries = false;
+}
+
 void GodotPhysicsServer3D::sync() {
 	doing_sync = true;
 }

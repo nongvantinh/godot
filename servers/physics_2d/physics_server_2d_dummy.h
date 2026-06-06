@@ -342,6 +342,10 @@ public:
 	virtual void sync() override {}
 	virtual void flush_queries() override {}
 	virtual void end_sync() override {}
+
+	virtual void space_step(RID p_space, real_t p_delta) override {}
+	virtual void space_flush_queries(RID p_space) override {}
+
 	virtual void finish() override {
 		memdelete(body_state_dummy);
 		memdelete(space_state_dummy);

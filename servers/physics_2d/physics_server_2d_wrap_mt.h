@@ -117,6 +117,23 @@ public:
 		return physics_server_2d->space_get_direct_state(p_space);
 	}
 
+	// Per-space manual stepping — main-thread-only; caller manages sync bracketing.
+	virtual void space_step(RID p_space, real_t p_delta) override {
+		ERR_FAIL_COND_MSG(!Thread::is_main_thread(), "space_step must be called from the main thread.");
+		physics_server_2d->space_step(p_space, p_delta);
+	}
+	virtual void space_flush_queries(RID p_space) override {
+		ERR_FAIL_COND_MSG(!Thread::is_main_thread(), "space_flush_queries must be called from the main thread.");
+		physics_server_2d->space_flush_queries(p_space);
+	}
+	virtual void space_step_safe(RID p_space, real_t p_delta) override {
+		ERR_FAIL_COND_MSG(!Thread::is_main_thread(), "space_step_safe must be called from the main thread.");
+		sync();
+		physics_server_2d->space_flush_queries(p_space);
+		physics_server_2d->space_step(p_space, p_delta);
+		end_sync();
+	}
+
 	FUNC2(space_set_debug_contacts, RID, int);
 	virtual Vector<Vector2> space_get_contacts(RID p_space) const override {
 		ERR_FAIL_COND_V(!Thread::is_main_thread(), Vector<Vector2>());

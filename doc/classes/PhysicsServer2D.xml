@@ -990,6 +990,43 @@
 				Sets the value of the given space parameter.
 			</description>
 		</method>
+		<method name="space_step">
+			<return type="void" />
+			<param index="0" name="space" type="RID" />
+			<param index="1" name="delta" type="float" />
+			<description>
+				Advances the physics simulation for the given [param space] by [param delta] seconds. This is a low-level primitive that steps exactly one space on demand. The caller is responsible for ensuring that the command queue has been drained and the physics thread is idle before calling this method (e.g. by calling [method space_step_safe], which manages the synchronization automatically). Must be called from the main thread.
+			</description>
+		</method>
+		<method name="space_flush_queries">
+			<return type="void" />
+			<param index="0" name="space" type="RID" />
+			<description>
+				Flushes deferred query callbacks (e.g. body-entered/body-exited signals) for the given [param space]. Equivalent to one iteration of the per-space flush that the automatic physics loop performs each frame. Must be called from the main thread.
+			</description>
+		</method>
+		<method name="space_step_safe">
+			<return type="void" />
+			<param index="0" name="space" type="RID" />
+			<param index="1" name="delta" type="float" />
+			<description>
+				Recommended entry point for manually advancing a single physics space. Performs, in order: server-global [code]sync[/code], per-space [method space_flush_queries], per-space [method space_step], then server-global [code]end_sync[/code]. Under [code]run_on_separate_thread = true[/code] the [code]sync[/code] step performs the full cross-thread handshake before the step runs, so the step never observes stale body transforms. Must be called from the main thread.
+				[codeblocks]
+				[gdscript]
+				var space = PhysicsServer2D.space_create()
+				PhysicsServer2D.space_set_active(space, true)
+				# Advance the space by one fixed step.
+				PhysicsServer2D.space_step_safe(space, 1.0 / 60.0)
+				[/gdscript]
+				[csharp]
+				var space = PhysicsServer2D.SpaceCreate();
+				PhysicsServer2D.SpaceSetActive(space, true);
+				// Advance the space by one fixed step.
+				PhysicsServer2D.SpaceStepSafe(space, 1.0f / 60.0f);
+				[/csharp]
+				[/codeblocks]
+			</description>
+		</method>
 		<method name="world_boundary_shape_create">
 			<return type="RID" />
 			<description>
