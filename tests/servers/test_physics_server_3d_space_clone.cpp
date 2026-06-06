@@ -68,7 +68,7 @@ TEST_SUITE("[PhysicsServer3D][SpaceClone]") {
 
 	TEST_CASE("[SceneTree][PhysicsServer3D] FEATURE_STATE_CLONE: dummy returns NONE") {
 		if (!is_dummy_server()) {
-			WARN("Test targets dummy server but a real backend is loaded — skipping.");
+			MESSAGE("Test targets dummy server but a real backend is loaded — skipping.");
 			return;
 		}
 		PhysicsServer3D *ps = PhysicsServer3D::get_singleton();
@@ -81,7 +81,7 @@ TEST_SUITE("[PhysicsServer3D][SpaceClone]") {
 
 	TEST_CASE("[SceneTree][PhysicsServer3D] FEATURE_STATE_CLONE: real backend returns PARTIAL") {
 		if (is_dummy_server()) {
-			WARN("Skipping: dummy server.");
+			MESSAGE("Skipping: dummy server.");
 			return;
 		}
 		PhysicsServer3D *ps = PhysicsServer3D::get_singleton();
@@ -100,7 +100,7 @@ TEST_SUITE("[PhysicsServer3D][SpaceClone]") {
 
 	TEST_CASE("[SceneTree][PhysicsServer3D] space_clone_state: copies body state by ordinal") {
 		if (is_dummy_server()) {
-			WARN("Skipping: dummy server.");
+			MESSAGE("Skipping: dummy server.");
 			return;
 		}
 		PhysicsServer3D *ps = PhysicsServer3D::get_singleton();
@@ -153,7 +153,7 @@ TEST_SUITE("[PhysicsServer3D][SpaceClone]") {
 
 	TEST_CASE("[SceneTree][PhysicsServer3D] space_clone_state: count mismatch returns false, no partial write") {
 		if (is_dummy_server()) {
-			WARN("Skipping: dummy server.");
+			MESSAGE("Skipping: dummy server.");
 			return;
 		}
 		PhysicsServer3D *ps = PhysicsServer3D::get_singleton();
@@ -206,7 +206,7 @@ TEST_SUITE("[PhysicsServer3D][SpaceClone]") {
 
 	TEST_CASE("[SceneTree][PhysicsServer3D] space_clone_state: src == dst returns false") {
 		if (is_dummy_server()) {
-			WARN("Skipping: dummy server.");
+			MESSAGE("Skipping: dummy server.");
 			return;
 		}
 		PhysicsServer3D *ps = PhysicsServer3D::get_singleton();
@@ -254,7 +254,7 @@ TEST_SUITE("[PhysicsServer3D][SpaceClone]") {
 
 	TEST_CASE("[SceneTree][PhysicsServer3D] space_clone_state: cloned space trajectory within two-budget tolerance") {
 		if (is_dummy_server()) {
-			WARN("Skipping: dummy server.");
+			MESSAGE("Skipping: dummy server.");
 			return;
 		}
 		PhysicsServer3D *ps = PhysicsServer3D::get_singleton();

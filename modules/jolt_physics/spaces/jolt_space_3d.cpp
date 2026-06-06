@@ -185,6 +185,32 @@ JoltSpace3D::~JoltSpace3D() {
 		delete layers;
 		layers = nullptr;
 	}
+
+	// D2 (GH-15): destroy per-space resources for isolated spaces.
+	if (isolated_temp_allocator != nullptr) {
+		delete isolated_temp_allocator;
+		isolated_temp_allocator = nullptr;
+	}
+	if (isolated_job_system != nullptr) {
+		delete isolated_job_system;
+		isolated_job_system = nullptr;
+	}
+}
+
+void JoltSpace3D::make_isolated() {
+	if (is_isolated) {
+		return; // Already isolated — no-op.
+	}
+	// Create per-space JobSystemSingleThreaded (avoids JoltJobSystem::Job::completed_head
+	// inline static std::atomic, which is process-global and races under concurrent Update).
+	isolated_job_system = new JPH::JobSystemSingleThreaded();
+	isolated_job_system->Init(JPH::cMaxPhysicsJobs);
+	// Use malloc-backed allocator (avoids JoltTempAllocator unsynchronized bump state).
+	isolated_temp_allocator = new JPH::TempAllocatorMalloc();
+	// Swap the pointers used by step().
+	job_system = isolated_job_system;
+	temp_allocator = isolated_temp_allocator;
+	is_isolated = true;
 }
 
 void JoltSpace3D::step(float p_step) {

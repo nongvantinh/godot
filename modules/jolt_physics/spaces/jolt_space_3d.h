@@ -35,6 +35,7 @@
 #include <Jolt/Jolt.h>
 
 #include <Jolt/Core/JobSystem.h>
+#include <Jolt/Core/JobSystemSingleThreaded.h>
 #include <Jolt/Core/TempAllocator.h>
 #include <Jolt/Physics/Body/BodyInterface.h>
 #include <Jolt/Physics/Collision/BroadPhase/BroadPhaseQuery.h>
@@ -70,6 +71,17 @@ class JoltSpace3D {
 
 	JPH::JobSystem *job_system = nullptr;
 	JPH::TempAllocator *temp_allocator = nullptr;
+
+	// D2 (GH-15): per-space private job-system and temp-allocator for isolated spaces.
+	// Owned exclusively by this space; destroyed with it. Null for live (non-isolated) spaces.
+	JPH::JobSystemSingleThreaded *isolated_job_system = nullptr;
+	JPH::TempAllocatorMalloc *isolated_temp_allocator = nullptr;
+
+	// True when this space owns its own job-system/temp-allocator and may be stepped
+	// directly from a worker thread via JoltPhysicsServer3D::space_step_isolated().
+	// A space that has been passed to space_set_active(true) is NEVER isolated (AC8).
+	bool is_isolated = false;
+
 	JoltLayers *layers = nullptr;
 	JoltContactListener3D *contact_listener = nullptr;
 	JoltBodyActivationListener3D *body_activation_listener = nullptr;
@@ -98,6 +110,14 @@ public:
 
 	bool is_active() const { return active; }
 	void set_active(bool p_active) { active = p_active; }
+
+	// D2 (GH-15): isolated-space thread-direct stepping support.
+	bool get_is_isolated() const { return is_isolated; }
+	// Promote this space to isolated mode: allocate per-space job-system and
+	// temp-allocator so the space can be stepped directly from a worker thread.
+	// Must only be called on a space that has never been added to active_spaces
+	// (i.e. never passed to space_set_active(true)).  No-op if already isolated.
+	void make_isolated();
 
 	bool is_stepping() const { return stepping; }
 

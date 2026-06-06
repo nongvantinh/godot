@@ -37,6 +37,7 @@ TEST_FORCE_LINK(test_physics_server_3d_space_step)
 #include "core/config/engine.h"
 #include "core/object/worker_thread_pool.h"
 #include "core/os/os.h"
+#include "core/variant/typed_array.h"
 #include "servers/physics_3d/physics_server_3d.h"
 #include "servers/physics_3d/physics_server_3d_dummy.h"
 #include "servers/physics_3d/physics_server_3d_wrap_mt.h"
@@ -61,7 +62,7 @@ TEST_SUITE("[PhysicsServer3D][SpaceStep]") {
 
 	TEST_CASE("[SceneTree][PhysicsServer3D] space_step advances a body under gravity") {
 		if (is_dummy_server()) {
-			WARN("Skipping: dummy physics server has no simulation.");
+			MESSAGE("Skipping: dummy physics server has no simulation.");
 			return;
 		}
 
@@ -96,7 +97,7 @@ TEST_SUITE("[PhysicsServer3D][SpaceStep]") {
 
 	TEST_CASE("[SceneTree][PhysicsServer3D] space_flush_queries is callable on an active space") {
 		if (is_dummy_server()) {
-			WARN("Skipping: dummy physics server has no simulation.");
+			MESSAGE("Skipping: dummy physics server has no simulation.");
 			return;
 		}
 
@@ -116,7 +117,7 @@ TEST_SUITE("[PhysicsServer3D][SpaceStep]") {
 
 	TEST_CASE("[SceneTree][PhysicsServer3D] space_step does not advance get_physics_frames") {
 		if (is_dummy_server()) {
-			WARN("Skipping: dummy physics server has no simulation.");
+			MESSAGE("Skipping: dummy physics server has no simulation.");
 			return;
 		}
 
@@ -174,7 +175,7 @@ TEST_SUITE("[PhysicsServer3D][SpaceStep]") {
 
 	TEST_CASE("[SceneTree][PhysicsServer3D] space_step_safe does not leave server in flushing state") {
 		if (is_dummy_server()) {
-			WARN("Skipping: dummy physics server has no simulation.");
+			MESSAGE("Skipping: dummy physics server has no simulation.");
 			return;
 		}
 
@@ -200,7 +201,7 @@ TEST_SUITE("[PhysicsServer3D][SpaceStep]") {
 	// AC: space_step only advances the named space, not other spaces.
 	TEST_CASE("[SceneTree][PhysicsServer3D] space_step advances only the named space") {
 		if (is_dummy_server()) {
-			WARN("Skipping: dummy physics server has no simulation.");
+			MESSAGE("Skipping: dummy physics server has no simulation.");
 			return;
 		}
 
@@ -260,7 +261,7 @@ TEST_SUITE("[PhysicsServer3D][SpaceStep]") {
 	// exists must not trigger query callbacks registered on space B.
 	TEST_CASE("[SceneTree][PhysicsServer3D] space_flush_queries flushes only the named space") {
 		if (is_dummy_server()) {
-			WARN("Skipping: dummy physics server has no simulation.");
+			MESSAGE("Skipping: dummy physics server has no simulation.");
 			return;
 		}
 
@@ -292,7 +293,7 @@ TEST_SUITE("[PhysicsServer3D][SpaceStep]") {
 	// Both must produce the same post-step body Y position.
 	TEST_CASE("[SceneTree][PhysicsServer3D] space_step parity with one automatic step iteration") {
 		if (is_dummy_server()) {
-			WARN("Skipping: dummy physics server has no simulation.");
+			MESSAGE("Skipping: dummy physics server has no simulation.");
 			return;
 		}
 		// This parity test only applies to GodotPhysics; skip for Jolt (which has
@@ -361,7 +362,7 @@ TEST_SUITE("[PhysicsServer3D][SpaceStep]") {
 	//  which is only possible if flush + step ran in the right order.)
 	TEST_CASE("[SceneTree][PhysicsServer3D] space_step_safe sync->flush->step->end_sync ordering invariant") {
 		if (is_dummy_server()) {
-			WARN("Skipping: dummy physics server has no simulation.");
+			MESSAGE("Skipping: dummy physics server has no simulation.");
 			return;
 		}
 
@@ -428,7 +429,7 @@ TEST_SUITE("[PhysicsServer3D][SpaceStep]") {
 	//   — [CommandQueue] Test Queue Basics with WorkerThreadPool sync.
 	TEST_CASE("[SceneTree][PhysicsServer3D] space_step_safe observes submitted body state (Q-D single-thread drain path)") {
 		if (is_dummy_server()) {
-			WARN("Skipping: dummy physics server has no simulation.");
+			MESSAGE("Skipping: dummy physics server has no simulation.");
 			return;
 		}
 
@@ -471,10 +472,231 @@ TEST_SUITE("[PhysicsServer3D][SpaceStep]") {
 		ps->free_rid(space);
 	}
 
+	// -----------------------------------------------------------------------
+	// GH-15 tests — space_step_batch (D1: batched contract + oracle)
+	// -----------------------------------------------------------------------
+
+	// AC4 + AC2: batch end-state identical to serial space_step loop, same dt (3D).
+	// N=4 spaces, 100 steps; each space has one rigid body under gravity.
+	// space_step_batch must produce positions within floating-point noise of the
+	// equivalent serial space_step_safe loop on identical initial conditions.
+	TEST_CASE("[SceneTree][PhysicsServer3D] space_step_batch parity with serial space_step_safe loop") {
+		if (is_dummy_server()) {
+			MESSAGE("Skipping: dummy physics server has no simulation.");
+			return;
+		}
+
+		PhysicsServer3D *ps = PhysicsServer3D::get_singleton();
+		REQUIRE(ps != nullptr);
+
+		const int N = 4;
+		const int STEPS = 100;
+		const real_t dt = 1.0f / 60.0f;
+
+		// --- Serial reference: step each space independently via space_step_safe ---
+		RID serial_spaces[N], serial_shapes[N], serial_bodies[N];
+		Vector3 serial_end[N];
+
+		for (int i = 0; i < N; i++) {
+			serial_spaces[i] = ps->space_create();
+			ps->space_set_active(serial_spaces[i], true);
+			serial_shapes[i] = ps->sphere_shape_create();
+			ps->shape_set_data(serial_shapes[i], 0.5f);
+			serial_bodies[i] = ps->body_create();
+			ps->body_set_space(serial_bodies[i], serial_spaces[i]);
+			ps->body_add_shape(serial_bodies[i], serial_shapes[i]);
+			ps->body_set_mode(serial_bodies[i], PhysicsServer3D::BODY_MODE_RIGID);
+			ps->body_set_state(serial_bodies[i], PhysicsServer3D::BODY_STATE_TRANSFORM,
+					Transform3D(Basis(), Vector3(0, 200.0f + i * 10.0f, 0)));
+		}
+
+		for (int s = 0; s < STEPS; s++) {
+			for (int i = 0; i < N; i++) {
+				ps->space_step_safe(serial_spaces[i], dt);
+			}
+		}
+		for (int i = 0; i < N; i++) {
+			serial_end[i] = get_body_y(ps, serial_bodies[i]) *
+					Vector3(0, 1, 0); // capture full origin
+			Variant v = ps->body_get_state(serial_bodies[i], PhysicsServer3D::BODY_STATE_TRANSFORM);
+			serial_end[i] = ((Transform3D)v).origin;
+		}
+
+		// --- Batch path: same initial conditions, stepped via space_step_batch ---
+		RID batch_spaces[N], batch_shapes[N], batch_bodies[N];
+		for (int i = 0; i < N; i++) {
+			batch_spaces[i] = ps->space_create();
+			ps->space_set_active(batch_spaces[i], true);
+			batch_shapes[i] = ps->sphere_shape_create();
+			ps->shape_set_data(batch_shapes[i], 0.5f);
+			batch_bodies[i] = ps->body_create();
+			ps->body_set_space(batch_bodies[i], batch_spaces[i]);
+			ps->body_add_shape(batch_bodies[i], batch_shapes[i]);
+			ps->body_set_mode(batch_bodies[i], PhysicsServer3D::BODY_MODE_RIGID);
+			ps->body_set_state(batch_bodies[i], PhysicsServer3D::BODY_STATE_TRANSFORM,
+					Transform3D(Basis(), Vector3(0, 200.0f + i * 10.0f, 0)));
+		}
+
+		TypedArray<RID> space_arr;
+		for (int i = 0; i < N; i++) {
+			space_arr.push_back(batch_spaces[i]);
+		}
+		for (int s = 0; s < STEPS; s++) {
+			ps->space_step_batch(space_arr, dt);
+		}
+
+		// Compare: batch end-state must match serial end-state within tolerance.
+		// Two-budget tolerance reused from Phase-4 (steady-state budget < 1e-3 m).
+		for (int i = 0; i < N; i++) {
+			Variant v = ps->body_get_state(batch_bodies[i], PhysicsServer3D::BODY_STATE_TRANSFORM);
+			Vector3 batch_end = ((Transform3D)v).origin;
+			real_t diff = (batch_end - serial_end[i]).length();
+			CHECK_MESSAGE(diff < (real_t)1e-3,
+					"space_step_batch end-state must match serial space_step_safe within steady-state budget.");
+		}
+
+		// Teardown
+		for (int i = 0; i < N; i++) {
+			ps->free_rid(serial_bodies[i]);
+			ps->free_rid(serial_shapes[i]);
+			ps->free_rid(serial_spaces[i]);
+			ps->free_rid(batch_bodies[i]);
+			ps->free_rid(batch_shapes[i]);
+			ps->free_rid(batch_spaces[i]);
+		}
+	}
+
+	// AC7: space_step_batch with empty array — no-op, no crash, server not in flushing state.
+	TEST_CASE("[SceneTree][PhysicsServer3D] space_step_batch empty array is a no-op") {
+		PhysicsServer3D *ps = PhysicsServer3D::get_singleton();
+		REQUIRE(ps != nullptr);
+
+		TypedArray<RID> empty;
+		CHECK_FALSE(ps->is_flushing_queries());
+		ps->space_step_batch(empty, 1.0f / 60.0f);
+		CHECK_FALSE(ps->is_flushing_queries());
+	}
+
+	// AC7: space_step_batch with invalid RID — skips cleanly, no crash.
+	TEST_CASE("[SceneTree][PhysicsServer3D] space_step_batch invalid RID is skipped") {
+		PhysicsServer3D *ps = PhysicsServer3D::get_singleton();
+		REQUIRE(ps != nullptr);
+
+		TypedArray<RID> arr;
+		arr.push_back(RID()); // null RID
+		ERR_PRINT_OFF;
+		ps->space_step_batch(arr, 1.0f / 60.0f);
+		ERR_PRINT_ON;
+		CHECK_FALSE(ps->is_flushing_queries());
+	}
+
+	// AC7: space_step_batch with duplicate RIDs — each occurrence stepped (no dedup).
+	// A single body stepped twice in one batch must have moved further than stepped once.
+	TEST_CASE("[SceneTree][PhysicsServer3D] space_step_batch duplicate RID is stepped twice") {
+		if (is_dummy_server()) {
+			MESSAGE("Skipping: dummy physics server has no simulation.");
+			return;
+		}
+
+		PhysicsServer3D *ps = PhysicsServer3D::get_singleton();
+		REQUIRE(ps != nullptr);
+
+		RID space = ps->space_create();
+		ps->space_set_active(space, true);
+		RID shape = ps->sphere_shape_create();
+		ps->shape_set_data(shape, 0.5f);
+		RID body = ps->body_create();
+		ps->body_set_space(body, space);
+		ps->body_add_shape(body, shape);
+		ps->body_set_mode(body, PhysicsServer3D::BODY_MODE_RIGID);
+		ps->body_set_state(body, PhysicsServer3D::BODY_STATE_TRANSFORM,
+				Transform3D(Basis(), Vector3(0, 100, 0)));
+
+		const real_t dt = 1.0f / 60.0f;
+
+		// Baseline: one step
+		real_t y_before = get_body_y(ps, body);
+		ps->space_step_safe(space, dt);
+		real_t y_after_one = get_body_y(ps, body);
+		// Body under gravity must have dropped after one step.
+		CHECK(y_after_one < y_before);
+
+		// Reset position
+		ps->body_set_state(body, PhysicsServer3D::BODY_STATE_TRANSFORM,
+				Transform3D(Basis(), Vector3(0, 100, 0)));
+
+		// Batch with duplicate: same space twice -> two steps
+		TypedArray<RID> dup;
+		dup.push_back(space);
+		dup.push_back(space);
+		ps->space_step_batch(dup, dt);
+		real_t y_after_two = get_body_y(ps, body);
+
+		// Two steps must move further than one step (body under gravity).
+		CHECK_MESSAGE(y_after_two < y_after_one,
+				"space_step_batch with duplicate RID must step space twice (further than single step).");
+
+		ps->free_rid(body);
+		ps->free_rid(shape);
+		ps->free_rid(space);
+	}
+
+	// AC8: space_step_batch from non-main thread returns clean error.
+	TEST_CASE("[SceneTree][PhysicsServer3D] space_step_batch from non-main thread returns clean error") {
+		PhysicsServer3D *ps = PhysicsServer3D::get_singleton();
+		REQUIRE(ps != nullptr);
+
+		RID space = ps->space_create();
+		TypedArray<RID> arr;
+		arr.push_back(space);
+
+		struct OffThreadWork {
+			PhysicsServer3D *ps;
+			TypedArray<RID> arr;
+			static void run(void *p_ud) {
+				OffThreadWork *self = static_cast<OffThreadWork *>(p_ud);
+				ERR_PRINT_OFF;
+				self->ps->space_step_batch(self->arr, 1.0f / 60.0f);
+				ERR_PRINT_ON;
+			}
+		} work{ ps, arr };
+
+		WorkerThreadPool::TaskID tid = WorkerThreadPool::get_singleton()->add_native_task(
+				&OffThreadWork::run, &work, false);
+		WorkerThreadPool::get_singleton()->wait_for_task_completion(tid);
+
+		// Server must still be usable from main thread after the no-op off-thread call.
+		CHECK_FALSE(ps->is_flushing_queries());
+		ps->free_rid(space);
+	}
+
+	// AC: space_step_batch does not advance get_physics_frames.
+	TEST_CASE("[SceneTree][PhysicsServer3D] space_step_batch does not advance physics_frames") {
+		if (is_dummy_server()) {
+			MESSAGE("Skipping: dummy physics server has no simulation.");
+			return;
+		}
+
+		PhysicsServer3D *ps = PhysicsServer3D::get_singleton();
+		REQUIRE(ps != nullptr);
+
+		RID space = ps->space_create();
+		ps->space_set_active(space, true);
+		TypedArray<RID> arr;
+		arr.push_back(space);
+
+		uint64_t frames_before = Engine::get_singleton()->get_physics_frames();
+		ps->space_step_batch(arr, 1.0f / 60.0f);
+		uint64_t frames_after = Engine::get_singleton()->get_physics_frames();
+
+		CHECK_EQ(frames_before, frames_after);
+		ps->free_rid(space);
+	}
+
 	// AC: space_step called from a non-main thread returns clean error and does not crash.
 	TEST_CASE("[SceneTree][PhysicsServer3D] space_step from non-main thread returns clean error") {
 		if (is_dummy_server()) {
-			WARN("Skipping: dummy physics server has no simulation.");
+			MESSAGE("Skipping: dummy physics server has no simulation.");
 			return;
 		}
 
@@ -520,6 +742,48 @@ TEST_SUITE("[PhysicsServer3D][SpaceStep]") {
 
 		ps->free_rid(body);
 		ps->free_rid(shape);
+		ps->free_rid(space);
+	}
+
+	// #3 delta guard: a non-finite or negative delta must be rejected (no step), not
+	// forwarded to the solver. Covers space_step and, transitively, space_step_safe.
+	TEST_CASE("[SceneTree][PhysicsServer3D] space_step rejects non-finite / negative delta (#3)") {
+		if (is_dummy_server()) {
+			MESSAGE("Skipping: dummy physics server has no simulation.");
+			return;
+		}
+
+		PhysicsServer3D *ps = PhysicsServer3D::get_singleton();
+		REQUIRE(ps != nullptr);
+
+		RID space = ps->space_create();
+		ps->space_set_active(space, true);
+
+		RID sphere_shape = ps->sphere_shape_create();
+		ps->shape_set_data(sphere_shape, 0.5f);
+
+		RID body = ps->body_create();
+		ps->body_set_space(body, space);
+		ps->body_add_shape(body, sphere_shape);
+		ps->body_set_mode(body, PhysicsServer3D::BODY_MODE_RIGID);
+		ps->body_set_state(body, PhysicsServer3D::BODY_STATE_TRANSFORM, Transform3D(Basis(), Vector3(0, 10, 0)));
+
+		const real_t y_start = get_body_y(ps, body);
+
+		// Bad deltas must be rejected (ERR_FAIL), leaving the body untouched.
+		ERR_PRINT_OFF;
+		ps->space_step_safe(space, Math::NaN);
+		ps->space_step_safe(space, Math::INF);
+		ps->space_step_safe(space, -1.0f);
+		ERR_PRINT_ON;
+		CHECK_MESSAGE(get_body_y(ps, body) == y_start, "A non-finite/negative delta must not advance the body.");
+
+		// A valid delta still steps normally (proves the body is otherwise movable).
+		ps->space_step_safe(space, 1.0f / 60.0f);
+		CHECK_MESSAGE(get_body_y(ps, body) < y_start, "A valid delta must still advance the body.");
+
+		ps->free_rid(body);
+		ps->free_rid(sphere_shape);
 		ps->free_rid(space);
 	}
 

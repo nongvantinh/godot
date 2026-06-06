@@ -33,6 +33,7 @@
 #include "core/object/worker_thread_pool.h"
 #include "core/os/thread.h"
 #include "core/templates/command_queue_mt.h"
+#include "core/variant/typed_array.h"
 #include "servers/physics_2d/physics_server_2d.h"
 
 #define ASYNC_COND_PUSH (Thread::get_caller_id() != server_thread && !(doing_sync.is_set() && Thread::is_main_thread()))
@@ -132,6 +133,20 @@ public:
 		physics_server_2d->space_flush_queries(p_space);
 		physics_server_2d->space_step(p_space, p_delta);
 		end_sync();
+	}
+	virtual void space_step_batch(const TypedArray<RID> &p_spaces, real_t p_delta) override {
+		ERR_FAIL_COND_MSG(!Thread::is_main_thread(), "space_step_batch must be called from the main thread.");
+		if (p_spaces.is_empty()) {
+			return; // AC7: empty array -> no-op, no handshake.
+		}
+		sync(); // ONE rendezvous for all N spaces
+		for (int i = 0; i < p_spaces.size(); i++) {
+			RID r = p_spaces[i];
+			ERR_CONTINUE(!r.is_valid());
+			physics_server_2d->space_flush_queries(r);
+			physics_server_2d->space_step(r, p_delta);
+		}
+		end_sync(); // ONE close
 	}
 	virtual PackedByteArray space_save_state(RID p_space) override {
 		ERR_FAIL_COND_V_MSG(!Thread::is_main_thread(), PackedByteArray(),

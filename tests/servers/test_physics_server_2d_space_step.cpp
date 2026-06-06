@@ -37,6 +37,7 @@ TEST_FORCE_LINK(test_physics_server_2d_space_step)
 #include "core/config/engine.h"
 #include "core/object/worker_thread_pool.h"
 #include "core/os/os.h"
+#include "core/variant/typed_array.h"
 #include "servers/physics_2d/physics_server_2d.h"
 #include "servers/physics_2d/physics_server_2d_dummy.h"
 
@@ -60,7 +61,7 @@ TEST_SUITE("[PhysicsServer2D][SpaceStep]") {
 
 	TEST_CASE("[SceneTree][PhysicsServer2D] space_step advances a body under gravity") {
 		if (is_dummy_server()) {
-			WARN("Skipping: dummy physics server has no simulation.");
+			MESSAGE("Skipping: dummy physics server has no simulation.");
 			return;
 		}
 
@@ -95,7 +96,7 @@ TEST_SUITE("[PhysicsServer2D][SpaceStep]") {
 
 	TEST_CASE("[SceneTree][PhysicsServer2D] space_flush_queries is callable on an active space") {
 		if (is_dummy_server()) {
-			WARN("Skipping: dummy physics server has no simulation.");
+			MESSAGE("Skipping: dummy physics server has no simulation.");
 			return;
 		}
 
@@ -115,7 +116,7 @@ TEST_SUITE("[PhysicsServer2D][SpaceStep]") {
 
 	TEST_CASE("[SceneTree][PhysicsServer2D] space_step does not advance get_physics_frames") {
 		if (is_dummy_server()) {
-			WARN("Skipping: dummy physics server has no simulation.");
+			MESSAGE("Skipping: dummy physics server has no simulation.");
 			return;
 		}
 
@@ -173,7 +174,7 @@ TEST_SUITE("[PhysicsServer2D][SpaceStep]") {
 
 	TEST_CASE("[SceneTree][PhysicsServer2D] space_step_safe does not leave server in flushing state") {
 		if (is_dummy_server()) {
-			WARN("Skipping: dummy physics server has no simulation.");
+			MESSAGE("Skipping: dummy physics server has no simulation.");
 			return;
 		}
 
@@ -197,7 +198,7 @@ TEST_SUITE("[PhysicsServer2D][SpaceStep]") {
 	// AC: 2D space_step advances only the named space, not other spaces.
 	TEST_CASE("[SceneTree][PhysicsServer2D] space_step advances only the named space") {
 		if (is_dummy_server()) {
-			WARN("Skipping: dummy physics server has no simulation.");
+			MESSAGE("Skipping: dummy physics server has no simulation.");
 			return;
 		}
 
@@ -254,7 +255,7 @@ TEST_SUITE("[PhysicsServer2D][SpaceStep]") {
 	// AC: GodotPhysics 2D parity — one space_step == one automatic step iteration.
 	TEST_CASE("[SceneTree][PhysicsServer2D] space_step parity with one automatic step iteration") {
 		if (is_dummy_server()) {
-			WARN("Skipping: dummy physics server has no simulation.");
+			MESSAGE("Skipping: dummy physics server has no simulation.");
 			return;
 		}
 
@@ -315,7 +316,7 @@ TEST_SUITE("[PhysicsServer2D][SpaceStep]") {
 	// The precise MT blocker is the same as documented in the 3D counterpart.
 	TEST_CASE("[SceneTree][PhysicsServer2D] space_step_safe observes submitted body state (drain invariant)") {
 		if (is_dummy_server()) {
-			WARN("Skipping: dummy physics server has no simulation.");
+			MESSAGE("Skipping: dummy physics server has no simulation.");
 			return;
 		}
 
@@ -351,10 +352,199 @@ TEST_SUITE("[PhysicsServer2D][SpaceStep]") {
 		ps->free_rid(space);
 	}
 
+	// -----------------------------------------------------------------------
+	// GH-15 tests — space_step_batch (D1: batched contract + oracle, 2D)
+	// -----------------------------------------------------------------------
+
+	// AC4 + AC2: batch end-state identical to serial space_step_safe loop, same dt (2D).
+	TEST_CASE("[SceneTree][PhysicsServer2D] space_step_batch parity with serial space_step_safe loop") {
+		if (is_dummy_server()) {
+			MESSAGE("Skipping: dummy physics server has no simulation.");
+			return;
+		}
+
+		PhysicsServer2D *ps = PhysicsServer2D::get_singleton();
+		REQUIRE(ps != nullptr);
+
+		const int N = 4;
+		const int STEPS = 100;
+		const real_t dt = 1.0f / 60.0f;
+
+		// --- Serial reference ---
+		RID serial_spaces[N], serial_shapes[N], serial_bodies[N];
+		Vector2 serial_end[N];
+
+		for (int i = 0; i < N; i++) {
+			serial_spaces[i] = ps->space_create();
+			ps->space_set_active(serial_spaces[i], true);
+			serial_shapes[i] = ps->circle_shape_create();
+			ps->shape_set_data(serial_shapes[i], 16.0f);
+			serial_bodies[i] = ps->body_create();
+			ps->body_set_space(serial_bodies[i], serial_spaces[i]);
+			ps->body_add_shape(serial_bodies[i], serial_shapes[i]);
+			ps->body_set_mode(serial_bodies[i], PhysicsServer2D::BODY_MODE_RIGID);
+			ps->body_set_state(serial_bodies[i], PhysicsServer2D::BODY_STATE_TRANSFORM,
+					Transform2D(0.0f, Vector2(0, -2000.0f - i * 100.0f)));
+		}
+
+		for (int s = 0; s < STEPS; s++) {
+			for (int i = 0; i < N; i++) {
+				ps->space_step_safe(serial_spaces[i], dt);
+			}
+		}
+		for (int i = 0; i < N; i++) {
+			serial_end[i] = get_body_pos(ps, serial_bodies[i]);
+		}
+
+		// --- Batch path ---
+		RID batch_spaces[N], batch_shapes[N], batch_bodies[N];
+		for (int i = 0; i < N; i++) {
+			batch_spaces[i] = ps->space_create();
+			ps->space_set_active(batch_spaces[i], true);
+			batch_shapes[i] = ps->circle_shape_create();
+			ps->shape_set_data(batch_shapes[i], 16.0f);
+			batch_bodies[i] = ps->body_create();
+			ps->body_set_space(batch_bodies[i], batch_spaces[i]);
+			ps->body_add_shape(batch_bodies[i], batch_shapes[i]);
+			ps->body_set_mode(batch_bodies[i], PhysicsServer2D::BODY_MODE_RIGID);
+			ps->body_set_state(batch_bodies[i], PhysicsServer2D::BODY_STATE_TRANSFORM,
+					Transform2D(0.0f, Vector2(0, -2000.0f - i * 100.0f)));
+		}
+
+		TypedArray<RID> space_arr;
+		for (int i = 0; i < N; i++) {
+			space_arr.push_back(batch_spaces[i]);
+		}
+		for (int s = 0; s < STEPS; s++) {
+			ps->space_step_batch(space_arr, dt);
+		}
+
+		// Compare within steady-state budget (< 1e-3 m / 1 px in 2D units).
+		for (int i = 0; i < N; i++) {
+			Vector2 batch_end = get_body_pos(ps, batch_bodies[i]);
+			real_t diff = (batch_end - serial_end[i]).length();
+			CHECK_MESSAGE(diff < (real_t)1.0,
+					"2D space_step_batch end-state must match serial space_step_safe within 1px tolerance.");
+		}
+
+		// Teardown
+		for (int i = 0; i < N; i++) {
+			ps->free_rid(serial_bodies[i]);
+			ps->free_rid(serial_shapes[i]);
+			ps->free_rid(serial_spaces[i]);
+			ps->free_rid(batch_bodies[i]);
+			ps->free_rid(batch_shapes[i]);
+			ps->free_rid(batch_spaces[i]);
+		}
+	}
+
+	// AC7: 2D space_step_batch empty array — no-op, no crash.
+	TEST_CASE("[SceneTree][PhysicsServer2D] space_step_batch empty array is a no-op") {
+		PhysicsServer2D *ps = PhysicsServer2D::get_singleton();
+		REQUIRE(ps != nullptr);
+
+		TypedArray<RID> empty;
+		CHECK_FALSE(ps->is_flushing_queries());
+		ps->space_step_batch(empty, 1.0f / 60.0f);
+		CHECK_FALSE(ps->is_flushing_queries());
+	}
+
+	// AC7: 2D space_step_batch with invalid RID — skips cleanly.
+	TEST_CASE("[SceneTree][PhysicsServer2D] space_step_batch invalid RID is skipped") {
+		PhysicsServer2D *ps = PhysicsServer2D::get_singleton();
+		REQUIRE(ps != nullptr);
+
+		TypedArray<RID> arr;
+		arr.push_back(RID());
+		ERR_PRINT_OFF;
+		ps->space_step_batch(arr, 1.0f / 60.0f);
+		ERR_PRINT_ON;
+		CHECK_FALSE(ps->is_flushing_queries());
+	}
+
+	// AC7: 2D space_step_batch with duplicate RIDs — each occurrence stepped (no dedup).
+	// A single body stepped twice in one batch must have moved further than stepped once.
+	TEST_CASE("[SceneTree][PhysicsServer2D] space_step_batch duplicate RID is stepped twice") {
+		if (is_dummy_server()) {
+			MESSAGE("Skipping: dummy physics server has no simulation.");
+			return;
+		}
+
+		PhysicsServer2D *ps = PhysicsServer2D::get_singleton();
+		REQUIRE(ps != nullptr);
+
+		RID space = ps->space_create();
+		ps->space_set_active(space, true);
+		RID shape = ps->circle_shape_create();
+		ps->shape_set_data(shape, 16.0f);
+		RID body = ps->body_create();
+		ps->body_set_space(body, space);
+		ps->body_add_shape(body, shape);
+		ps->body_set_mode(body, PhysicsServer2D::BODY_MODE_RIGID);
+		ps->body_set_state(body, PhysicsServer2D::BODY_STATE_TRANSFORM,
+				Transform2D(0.0f, Vector2(0, -2000)));
+
+		const real_t dt = 1.0f / 60.0f;
+
+		// Baseline: one step.
+		Vector2 pos_before = get_body_pos(ps, body);
+		ps->space_step_safe(space, dt);
+		Vector2 pos_after_one = get_body_pos(ps, body);
+		// Body under gravity must have moved after one step.
+		CHECK(pos_after_one != pos_before);
+
+		// Reset position.
+		ps->body_set_state(body, PhysicsServer2D::BODY_STATE_TRANSFORM,
+				Transform2D(0.0f, Vector2(0, -2000)));
+
+		// Batch with duplicate: same space twice -> two steps.
+		TypedArray<RID> dup;
+		dup.push_back(space);
+		dup.push_back(space);
+		ps->space_step_batch(dup, dt);
+		Vector2 pos_after_two = get_body_pos(ps, body);
+
+		// Two steps must differ from one step (body under gravity moves more in 2 steps).
+		CHECK_MESSAGE(pos_after_two != pos_after_one,
+				"space_step_batch with duplicate RID must step space twice (different position than single step).");
+
+		ps->free_rid(body);
+		ps->free_rid(shape);
+		ps->free_rid(space);
+	}
+
+	// AC8: 2D space_step_batch from non-main thread returns clean error.
+	TEST_CASE("[SceneTree][PhysicsServer2D] space_step_batch from non-main thread returns clean error") {
+		PhysicsServer2D *ps = PhysicsServer2D::get_singleton();
+		REQUIRE(ps != nullptr);
+
+		RID space = ps->space_create();
+		TypedArray<RID> arr;
+		arr.push_back(space);
+
+		struct OffThreadWork {
+			PhysicsServer2D *ps;
+			TypedArray<RID> arr;
+			static void run(void *p_ud) {
+				OffThreadWork *self = static_cast<OffThreadWork *>(p_ud);
+				ERR_PRINT_OFF;
+				self->ps->space_step_batch(self->arr, 1.0f / 60.0f);
+				ERR_PRINT_ON;
+			}
+		} work{ ps, arr };
+
+		WorkerThreadPool::TaskID tid = WorkerThreadPool::get_singleton()->add_native_task(
+				&OffThreadWork::run, &work, false);
+		WorkerThreadPool::get_singleton()->wait_for_task_completion(tid);
+
+		CHECK_FALSE(ps->is_flushing_queries());
+		ps->free_rid(space);
+	}
+
 	// AC: 2D space_step called from a non-main thread returns clean error and does not crash.
 	TEST_CASE("[SceneTree][PhysicsServer2D] space_step from non-main thread returns clean error") {
 		if (is_dummy_server()) {
-			WARN("Skipping: dummy physics server has no simulation.");
+			MESSAGE("Skipping: dummy physics server has no simulation.");
 			return;
 		}
 
@@ -397,6 +587,48 @@ TEST_SUITE("[PhysicsServer2D][SpaceStep]") {
 
 		ps->free_rid(body);
 		ps->free_rid(shape);
+		ps->free_rid(space);
+	}
+
+	// #3 delta guard: a non-finite or negative delta must be rejected (no step), not
+	// forwarded to the solver. Covers space_step and, transitively, space_step_safe.
+	TEST_CASE("[SceneTree][PhysicsServer2D] space_step rejects non-finite / negative delta (#3)") {
+		if (is_dummy_server()) {
+			MESSAGE("Skipping: dummy physics server has no simulation.");
+			return;
+		}
+
+		PhysicsServer2D *ps = PhysicsServer2D::get_singleton();
+		REQUIRE(ps != nullptr);
+
+		RID space = ps->space_create();
+		ps->space_set_active(space, true);
+
+		RID circle_shape = ps->circle_shape_create();
+		ps->shape_set_data(circle_shape, 16.0f);
+
+		RID body = ps->body_create();
+		ps->body_set_space(body, space);
+		ps->body_add_shape(body, circle_shape);
+		ps->body_set_mode(body, PhysicsServer2D::BODY_MODE_RIGID);
+		ps->body_set_state(body, PhysicsServer2D::BODY_STATE_TRANSFORM, Transform2D(0.0f, Vector2(0, -200)));
+
+		const Vector2 pos_start = get_body_pos(ps, body);
+
+		// Bad deltas must be rejected (ERR_FAIL), leaving the body untouched.
+		ERR_PRINT_OFF;
+		ps->space_step_safe(space, Math::NaN);
+		ps->space_step_safe(space, Math::INF);
+		ps->space_step_safe(space, -1.0f);
+		ERR_PRINT_ON;
+		CHECK_MESSAGE(get_body_pos(ps, body) == pos_start, "A non-finite/negative delta must not advance the body.");
+
+		// A valid delta still steps normally (proves the body is otherwise movable).
+		ps->space_step_safe(space, 1.0f / 60.0f);
+		CHECK_MESSAGE(get_body_pos(ps, body) != pos_start, "A valid delta must still advance the body.");
+
+		ps->free_rid(body);
+		ps->free_rid(circle_shape);
 		ps->free_rid(space);
 	}
 

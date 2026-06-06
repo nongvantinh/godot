@@ -30,6 +30,7 @@
 
 #pragma once
 
+#include "core/variant/typed_array.h"
 #include "servers/physics_3d/physics_server_3d.h"
 
 class PhysicsDirectBodyState3DDummy : public PhysicsDirectBodyState3D {
@@ -439,6 +440,7 @@ public:
 
 	virtual void space_step(RID p_space, real_t p_delta) override {}
 	virtual void space_flush_queries(RID p_space) override {}
+	virtual void space_step_batch(const TypedArray<RID> &p_spaces, real_t p_delta) override {}
 	virtual PackedByteArray space_save_state(RID p_space) override { return PackedByteArray(); }
 	virtual bool space_restore_state(RID p_space, const PackedByteArray &p_state) override { return false; }
 	virtual bool space_clone_state(RID p_src_space, RID p_dst_space) override { return false; }

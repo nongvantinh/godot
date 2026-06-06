@@ -1700,6 +1700,11 @@ void GodotPhysicsServer3D::space_step(RID p_space, real_t p_delta) {
 	GodotSpace3D *space = space_owner.get_or_null(p_space);
 	ERR_FAIL_NULL(space);
 
+	// #3 delta guard: covers direct space_step plus space_step_safe/space_step_batch,
+	// which funnel through this method. Reject NaN/Inf/negative before the solver.
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_delta) || p_delta < 0,
+			"space_step: delta must be finite and non-negative.");
+
 	_update_shapes();
 
 	stepper->step(space, p_delta);
