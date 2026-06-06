@@ -203,6 +203,10 @@ public:
 	}
 	_FORCE_INLINE_ Vector<Vector3> get_debug_contacts() { return contact_debug; }
 	_FORCE_INLINE_ int get_debug_contact_count() { return contact_debug_count; }
+	// 5c: Reset the debug contact counter so the overlay clears stale geometry
+	// after a state restore (the next NOTIFICATION_INTERNAL_PHYSICS_PROCESS read
+	// will see count=0 instead of stale contacts from the pre-restore step).
+	_FORCE_INLINE_ void reset_debug_contact_count() { contact_debug_count = 0; }
 
 	void set_static_global_body(RID p_body) { static_global_body = p_body; }
 	RID get_static_global_body() { return static_global_body; }

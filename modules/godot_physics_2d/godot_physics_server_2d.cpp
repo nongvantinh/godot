@@ -37,6 +37,7 @@
 #include "core/debugger/engine_debugger.h"
 #include "core/io/marshalls.h"
 #include "core/os/os.h"
+#include "core/profiling/profiling.h"
 
 #define FLUSH_QUERY_CHECK(m_object) \
 	ERR_FAIL_COND_MSG(m_object->get_space() && flushing_queries, "Can't change this state while flushing queries. Use call_deferred() or set_deferred() to change monitoring state instead.");
@@ -1306,6 +1307,7 @@ void GodotPhysicsServer2D::step(real_t p_step) {
 }
 
 void GodotPhysicsServer2D::space_step(RID p_space, real_t p_delta) {
+	GodotProfileZone("Physics Step (manual 2D)");
 	if (!active) {
 		return;
 	}
@@ -1319,6 +1321,7 @@ void GodotPhysicsServer2D::space_step(RID p_space, real_t p_delta) {
 }
 
 void GodotPhysicsServer2D::space_flush_queries(RID p_space) {
+	GodotProfileZone("Physics Flush Queries (manual 2D)");
 	if (!active) {
 		return;
 	}
@@ -1572,6 +1575,13 @@ bool GodotPhysicsServer2D::space_restore_state(RID p_space, const PackedByteArra
 		WARN_PRINT("space_restore_state: no BODIES section found in blob.");
 		return false;
 	}
+
+	// 5c: After a state restore the world transforms change but the contact
+	// debug list (contact_debug_count) still reflects the pre-restore step.
+	// Reset it so the debug overlay shows zero stale contacts the frame after
+	// this restore (viewport reads space_get_contact_count on the next
+	// NOTIFICATION_INTERNAL_PHYSICS_PROCESS tick).
+	space->reset_debug_contact_count();
 
 	// Apply staged data.
 	for (const BodyRecord2D &rec : staged_bodies) {

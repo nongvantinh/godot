@@ -41,6 +41,7 @@
 #include "core/debugger/engine_debugger.h"
 #include "core/io/marshalls.h"
 #include "core/os/os.h"
+#include "core/profiling/profiling.h"
 
 #define FLUSH_QUERY_CHECK(m_object) \
 	ERR_FAIL_COND_MSG(m_object->get_space() && flushing_queries, "Can't change this state while flushing queries. Use call_deferred() or set_deferred() to change monitoring state instead.");
@@ -1691,6 +1692,7 @@ void GodotPhysicsServer3D::step(real_t p_step) {
 }
 
 void GodotPhysicsServer3D::space_step(RID p_space, real_t p_delta) {
+	GodotProfileZone("Physics Step (manual 3D)");
 	if (!active) {
 		return;
 	}
@@ -1704,6 +1706,7 @@ void GodotPhysicsServer3D::space_step(RID p_space, real_t p_delta) {
 }
 
 void GodotPhysicsServer3D::space_flush_queries(RID p_space) {
+	GodotProfileZone("Physics Flush Queries (manual 3D)");
 	if (!active) {
 		return;
 	}
@@ -1996,6 +1999,13 @@ bool GodotPhysicsServer3D::space_restore_state(RID p_space, const PackedByteArra
 	}
 
 	// --- All validation passed. Now apply staged data to live state. ---
+
+	// 5c: After a state restore the world transforms change but the contact
+	// debug list (contact_debug_count) still reflects the pre-restore step.
+	// Reset it so the debug overlay shows zero stale contacts the frame after
+	// this restore (viewport reads space_get_contact_count on the next
+	// NOTIFICATION_INTERNAL_PHYSICS_PROCESS tick).
+	space->reset_debug_contact_count();
 
 	for (const BodyRecord &rec : staged_bodies) {
 		RID rid = RID::from_uint64(rec.rid_id);

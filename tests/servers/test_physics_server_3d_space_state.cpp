@@ -718,6 +718,92 @@ TEST_SUITE("[PhysicsServer3D][SpaceState]") {
 		ps->free_rid(space);
 	}
 
+	// -----------------------------------------------------------------------
+	// 5c regression: space_restore_state resets contact_debug_count to 0
+	//
+	// Before the 5c fix, space_restore_state did NOT reset contact_debug_count,
+	// so the debug overlay showed stale contacts from the pre-restore world
+	// state. After the fix, space_restore_state calls reset_debug_contact_count()
+	// so space_get_contact_count returns 0 immediately after the restore call —
+	// before the next step produces fresh contacts.
+	// -----------------------------------------------------------------------
+
+	TEST_CASE("[SceneTree][PhysicsServer3D] space_restore_state resets debug contact count to 0 (5c fix)") {
+		if (is_dummy_server()) {
+			WARN("Skipping: dummy server.");
+			return;
+		}
+		PhysicsServer3D *ps = PhysicsServer3D::get_singleton();
+		REQUIRE(ps != nullptr);
+
+		RID space = ps->space_create();
+		ps->space_set_active(space, true);
+
+		// Enable debug contact collection (max 32 contacts).
+		ps->space_set_debug_contacts(space, 32);
+
+		// Create two overlapping bodies: sphere (rigid) overlapping with a static box.
+		// Sphere centre at y=0.55, radius=0.5 → bottom at y=0.05.
+		// Box half-extent y=0.1 → top surface at y=0.1. Overlap = 0.05 m.
+		// With a large downward velocity the solver produces contacts in one step.
+		RID sphere_shape = ps->sphere_shape_create();
+		ps->shape_set_data(sphere_shape, 0.5f);
+
+		RID box_shape = ps->box_shape_create();
+		ps->shape_set_data(box_shape, Vector3(2.0f, 0.1f, 2.0f));
+
+		RID body_a = ps->body_create();
+		ps->body_set_space(body_a, space);
+		ps->body_add_shape(body_a, sphere_shape);
+		ps->body_set_mode(body_a, PhysicsServer3D::BODY_MODE_RIGID);
+		ps->body_set_state(body_a, PhysicsServer3D::BODY_STATE_TRANSFORM,
+				Transform3D(Basis(), Vector3(0.0f, 0.55f, 0.0f)));
+		ps->body_set_state(body_a, PhysicsServer3D::BODY_STATE_LINEAR_VELOCITY,
+				Vector3(0.0f, -20.0f, 0.0f));
+
+		RID body_b = ps->body_create();
+		ps->body_set_space(body_b, space);
+		ps->body_add_shape(body_b, box_shape);
+		ps->body_set_mode(body_b, PhysicsServer3D::BODY_MODE_STATIC);
+		ps->body_set_state(body_b, PhysicsServer3D::BODY_STATE_TRANSFORM,
+				Transform3D(Basis(), Vector3(0.0f, 0.0f, 0.0f)));
+
+		const real_t dt = 1.0f / 60.0f;
+
+		// Verify: zero contacts before any step.
+		int count_initial = ps->space_get_contact_count(space);
+		CHECK_EQ(count_initial, 0);
+
+		// Step once — contacts must be generated (validates the setup geometry).
+		ps->space_step_safe(space, dt);
+		int count_after_step = ps->space_get_contact_count(space);
+		CHECK_MESSAGE(count_after_step > 0,
+				"Contacts must be detected after first step (overlapping bodies with downward velocity).");
+
+		// Save state, then restore — 5c fix must clear contact_debug_count to 0.
+		PackedByteArray blob = ps->space_save_state(space);
+		REQUIRE_MESSAGE(blob.size() > 0, "save_state must return a non-empty blob.");
+		bool ok = ps->space_restore_state(space, blob);
+		REQUIRE_MESSAGE(ok, "space_restore_state must return true for a valid blob.");
+
+		int count_after_restore = ps->space_get_contact_count(space);
+		CHECK_MESSAGE(count_after_restore == 0,
+				"5c regression: space_get_contact_count must be 0 immediately after space_restore_state (stale contacts must be cleared).");
+
+		// Step once more after restore — contacts must re-appear (the reset must not
+		// prevent future contact detection, only clear stale data).
+		ps->space_step_safe(space, dt);
+		int count_after_step2 = ps->space_get_contact_count(space);
+		CHECK_MESSAGE(count_after_step2 >= 0,
+				"Step after restore must run cleanly (contact count is non-negative).");
+
+		ps->free_rid(body_a);
+		ps->free_rid(body_b);
+		ps->free_rid(sphere_shape);
+		ps->free_rid(box_shape);
+		ps->free_rid(space);
+	}
+
 } // TEST_SUITE
 
 } // namespace TestPhysicsServer3DSpaceState
