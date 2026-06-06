@@ -1867,9 +1867,85 @@ void JoltPhysicsServer3D::space_reset(RID p_space) {
 	// from the physics system. Joint RIDs remain valid (not freed) per the spec.
 }
 
+bool JoltPhysicsServer3D::space_clone_state(RID p_src_space, RID p_dst_space) {
+	JoltSpace3D *src = space_owner.get_or_null(p_src_space);
+	ERR_FAIL_NULL_V_MSG(src, false, "space_clone_state: invalid src_space RID.");
+	JoltSpace3D *dst = space_owner.get_or_null(p_dst_space);
+	ERR_FAIL_NULL_V_MSG(dst, false, "space_clone_state: invalid dst_space RID.");
+	ERR_FAIL_COND_V_MSG(src == dst, false, "space_clone_state: src_space and dst_space must differ.");
+
+	// Collect bodies in both spaces, sorted by RID id (ascending).
+	// Jolt has no insertion-order list; sorting by RID id is a stable ordinal key
+	// provided the caller built dst by replaying src's creation order.
+	// Note: Jolt's same-space StateRecorder blob is BodyID-keyed and cannot cross
+	// independent PhysicsSystems, so this clone carries the Phase-3 field set only
+	// (PARTIAL fidelity — no warm-start/contact state).
+	LocalVector<JoltBody3D *> src_bodies;
+	LocalVector<JoltBody3D *> dst_bodies;
+
+	{
+		LocalVector<RID> rids = body_owner.get_owned_list();
+		for (const RID &rid : rids) {
+			JoltBody3D *body = body_owner.get_or_null(rid);
+			if (body == nullptr) {
+				continue;
+			}
+			if (body->get_space() == src) {
+				src_bodies.push_back(body);
+			} else if (body->get_space() == dst) {
+				dst_bodies.push_back(body);
+			}
+		}
+	}
+
+	// Sort both lists by RID id ascending (deterministic ordinal key).
+	struct ByRid {
+		bool operator()(const JoltBody3D *a, const JoltBody3D *b) const {
+			return a->get_rid().get_id() < b->get_rid().get_id();
+		}
+	};
+	src_bodies.sort_custom<ByRid>();
+	dst_bodies.sort_custom<ByRid>();
+
+	// All-or-nothing: body count must match.
+	if (src_bodies.size() != dst_bodies.size()) {
+		WARN_PRINT("space_clone_state: body count mismatch between src and dst spaces — no state was written.");
+		return false;
+	}
+
+	// Stage all source state before writing any destination body (no partial write).
+	struct BodyState {
+		Transform3D transform;
+		Vector3 linear_velocity;
+		Vector3 angular_velocity;
+		bool sleeping;
+	};
+	LocalVector<BodyState> staged;
+	staged.resize(src_bodies.size());
+	for (uint32_t i = 0; i < src_bodies.size(); i++) {
+		staged[i].transform = src_bodies[i]->get_transform_unscaled();
+		staged[i].linear_velocity = src_bodies[i]->get_linear_velocity();
+		staged[i].angular_velocity = src_bodies[i]->get_angular_velocity();
+		staged[i].sleeping = src_bodies[i]->is_sleeping();
+	}
+
+	// Apply staged state to dst bodies pairwise (ordinal i → ordinal i).
+	for (uint32_t i = 0; i < dst_bodies.size(); i++) {
+		dst_bodies[i]->set_transform(staged[i].transform);
+		dst_bodies[i]->set_linear_velocity(staged[i].linear_velocity);
+		dst_bodies[i]->set_angular_velocity(staged[i].angular_velocity);
+		dst_bodies[i]->set_is_sleeping(staged[i].sleeping);
+	}
+
+	return true;
+}
+
 int JoltPhysicsServer3D::space_get_feature(RID p_space, SpaceFeature p_feature) const {
 	if (p_feature == FEATURE_STATE_SNAPSHOT) {
 		return SPACE_FEATURE_FULL;
+	}
+	if (p_feature == FEATURE_STATE_CLONE) {
+		return SPACE_FEATURE_PARTIAL;
 	}
 	return SPACE_FEATURE_NONE;
 }

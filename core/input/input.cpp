@@ -1585,6 +1585,18 @@ bool Input::is_agile_input_event_flushing() {
 	return agile_input_event_flushing;
 }
 
+uint64_t Input::get_action_edge_fingerprint() const {
+	// Sum all pressed/released physics-frame stamps across every tracked action.
+	// A flush that consumes or creates an action edge bumps one of these stamps,
+	// so the sum changes. Used only inside DEV_ASSERT in physics_iteration_step.
+	uint64_t sum = 0;
+	for (const KeyValue<StringName, ActionState> &kv : action_states) {
+		sum += kv.value.pressed_physics_frame;
+		sum += kv.value.released_physics_frame;
+	}
+	return sum;
+}
+
 void Input::set_agile_input_event_flushing(bool p_enable) {
 	agile_input_event_flushing = p_enable;
 }

@@ -432,6 +432,7 @@ public:
 	virtual void space_flush_queries(RID p_space) override;
 	virtual PackedByteArray space_save_state(RID p_space) override;
 	virtual bool space_restore_state(RID p_space, const PackedByteArray &p_state) override;
+	virtual bool space_clone_state(RID p_src_space, RID p_dst_space) override;
 	virtual void space_reset(RID p_space) override;
 	virtual int space_get_feature(RID p_space, SpaceFeature p_feature) const override;
 

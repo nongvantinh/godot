@@ -352,6 +352,7 @@ void PhysicsServer2DExtension::_bind_methods() {
 	GDVIRTUAL_BIND(_space_flush_queries, "space");
 	GDVIRTUAL_BIND(_space_save_state, "space");
 	GDVIRTUAL_BIND(_space_restore_state, "space", "state");
+	GDVIRTUAL_BIND(_space_clone_state, "src_space", "dst_space");
 	GDVIRTUAL_BIND(_space_reset, "space");
 	GDVIRTUAL_BIND(_space_get_feature, "space", "feature");
 

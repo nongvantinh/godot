@@ -474,6 +474,12 @@ public:
 #endif
 	void flush_buffered_events();
 	bool is_agile_input_event_flushing();
+
+	// Returns a cheap fingerprint of all action edge timestamps (pressed/released
+	// physics-frame counters). Used by Main::physics_iteration_step to assert that
+	// a dry-run tick does not consume any input action edges.
+	uint64_t get_action_edge_fingerprint() const;
+
 	void set_agile_input_event_flushing(bool p_enable);
 	void set_use_accumulated_input(bool p_enable);
 	bool is_using_accumulated_input();

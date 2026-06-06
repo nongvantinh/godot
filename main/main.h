@@ -81,7 +81,7 @@ public:
 	// physics for-loop. Returns true iff MainLoop::physics_process requested exit.
 	// Registered as a callback on ::Engine at startup so core_bind can invoke it
 	// without a core→main reverse dependency.
-	static bool physics_iteration_step(double p_physics_step, double p_time_scale);
+	static bool physics_iteration_step(double p_physics_step, double p_time_scale, bool p_dry_run = false);
 
 	static bool iteration();
 	static void force_redraw();

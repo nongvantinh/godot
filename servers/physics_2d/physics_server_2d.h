@@ -621,6 +621,7 @@ public:
 
 	enum SpaceFeature {
 		FEATURE_STATE_SNAPSHOT = 0,
+		FEATURE_STATE_CLONE = 1,
 	};
 
 	enum SpaceFeatureSupport {
@@ -631,6 +632,7 @@ public:
 
 	virtual PackedByteArray space_save_state(RID p_space) = 0;
 	virtual bool space_restore_state(RID p_space, const PackedByteArray &p_state) = 0;
+	virtual bool space_clone_state(RID p_src_space, RID p_dst_space) = 0;
 	virtual void space_reset(RID p_space) = 0;
 	virtual int space_get_feature(RID p_space, SpaceFeature p_feature) const { return SPACE_FEATURE_NONE; }
 

@@ -4926,23 +4926,53 @@ static uint64_t navigation_process_ticks_last_frame = 0;
 // p_physics_step_ticks and p_navigation_process_ticks are per-frame accumulators
 // (largest-step tracking) passed in from the caller; they are updated in-place.
 // Returns true iff MainLoop::physics_process requested exit this tick.
-bool Main::physics_iteration_step(double p_physics_step, double p_time_scale) {
+//
+// p_dry_run: when true, the solver steps but all side effects that would corrupt the
+// live world (physics_frames advance, Input edge consumption, _physics_process dispatch,
+// navigation, message-queue flushes, interpolation prep) are suppressed. The two
+// prediction-critical invariants are enforced by DEV_ASSERT so a future refactor cannot
+// silently break them.
+bool Main::physics_iteration_step(double p_physics_step, double p_time_scale, bool p_dry_run) {
 	GodotProfileZone("Physics Step");
 	GodotProfileZoneGroupedFirst(_physics_zone, "setup");
-	if (Input::get_singleton()->is_agile_input_event_flushing()) {
-		Input::get_singleton()->flush_buffered_events();
+
+	// --- Dry-run assertion fingerprints (captured before any mutation) ---
+#ifdef DEV_ENABLED
+	const uint64_t frames_before = Engine::get_singleton()->get_physics_frames();
+	// Fingerprint for Input action-edge detection: sum of pressed/released physics-frame
+	// stamps across all tracked actions. A flush that consumes or creates an edge bumps
+	// one of these stamps, changing the sum.
+	const uint64_t input_edge_fingerprint_before =
+			(Input::get_singleton() != nullptr) ? Input::get_singleton()->get_action_edge_fingerprint() : 0;
+#endif // DEV_ENABLED
+
+	// Flush agile input events on the normal (non-dry-run) path only.
+	if (!p_dry_run) {
+		if (Input::get_singleton()->is_agile_input_event_flushing()) {
+			Input::get_singleton()->flush_buffered_events();
+		}
 	}
 
 	Engine::get_singleton()->_in_physics = true;
-	Engine::get_singleton()->_physics_frames++;
+
+	// Dry-run: do NOT advance _physics_frames (invariant A).
+	if (!p_dry_run) {
+		Engine::get_singleton()->_physics_frames++;
+	}
 
 	uint64_t physics_begin = OS::get_singleton()->get_ticks_usec();
 
 	// Prepare the fixed timestep interpolated nodes BEFORE they are updated
 	// by the physics server, otherwise the current and previous transforms
 	// may be the same, and no interpolation takes place.
-	GodotProfileZoneGrouped(_physics_zone, "main loop iteration prepare");
-	OS::get_singleton()->get_main_loop()->iteration_prepare();
+	// Dry-run: skip — no node should observe a dry tick.
+	if (!p_dry_run) {
+		MainLoop *ml = OS::get_singleton()->get_main_loop();
+		if (ml != nullptr) {
+			GodotProfileZoneGrouped(_physics_zone, "main loop iteration prepare");
+			ml->iteration_prepare();
+		}
+	}
 
 #ifndef PHYSICS_3D_DISABLED
 	GodotProfileZoneGrouped(_physics_zone, "PhysicsServer3D::sync");
@@ -4956,39 +4986,45 @@ bool Main::physics_iteration_step(double p_physics_step, double p_time_scale) {
 	PhysicsServer2D::get_singleton()->flush_queries();
 #endif // PHYSICS_2D_DISABLED
 
-	GodotProfileZoneGrouped(_physics_zone, "physics_process");
-	if (OS::get_singleton()->get_main_loop()->physics_process(p_physics_step * p_time_scale)) {
+	// Dry-run: skip _physics_process dispatch (no node side effects).
+	if (!p_dry_run) {
+		MainLoop *ml = OS::get_singleton()->get_main_loop();
+		if (ml != nullptr) {
+			GodotProfileZoneGrouped(_physics_zone, "physics_process");
+			if (ml->physics_process(p_physics_step * p_time_scale)) {
 #ifndef PHYSICS_3D_DISABLED
-		PhysicsServer3D::get_singleton()->end_sync();
+				PhysicsServer3D::get_singleton()->end_sync();
 #endif // PHYSICS_3D_DISABLED
 #ifndef PHYSICS_2D_DISABLED
-		PhysicsServer2D::get_singleton()->end_sync();
+				PhysicsServer2D::get_singleton()->end_sync();
 #endif // PHYSICS_2D_DISABLED
 
-		Engine::get_singleton()->_in_physics = false;
-		return true;
-	}
+				Engine::get_singleton()->_in_physics = false;
+				return true;
+			}
+		}
 
 #if !defined(NAVIGATION_2D_DISABLED) || !defined(NAVIGATION_3D_DISABLED)
-	uint64_t navigation_begin = OS::get_singleton()->get_ticks_usec();
+		uint64_t navigation_begin = OS::get_singleton()->get_ticks_usec();
 
 #ifndef NAVIGATION_2D_DISABLED
-	GodotProfileZoneGrouped(_profile_zone, "NavigationServer2D::physics_process");
-	NavigationServer2D::get_singleton()->physics_process(p_physics_step * p_time_scale);
+		GodotProfileZoneGrouped(_profile_zone, "NavigationServer2D::physics_process");
+		NavigationServer2D::get_singleton()->physics_process(p_physics_step * p_time_scale);
 #endif // NAVIGATION_2D_DISABLED
 #ifndef NAVIGATION_3D_DISABLED
-	GodotProfileZoneGrouped(_profile_zone, "NavigationServer3D::physics_process");
-	NavigationServer3D::get_singleton()->physics_process(p_physics_step * p_time_scale);
+		GodotProfileZoneGrouped(_profile_zone, "NavigationServer3D::physics_process");
+		NavigationServer3D::get_singleton()->physics_process(p_physics_step * p_time_scale);
 #endif // NAVIGATION_3D_DISABLED
 
-	{
-		const uint64_t nav_elapsed = OS::get_singleton()->get_ticks_usec() - navigation_begin;
-		navigation_process_ticks_last_frame = MAX(navigation_process_ticks_last_frame, nav_elapsed); // keep the largest one for reference
-		navigation_process_max = MAX(nav_elapsed, navigation_process_max);
-	}
+		{
+			const uint64_t nav_elapsed = OS::get_singleton()->get_ticks_usec() - navigation_begin;
+			navigation_process_ticks_last_frame = MAX(navigation_process_ticks_last_frame, nav_elapsed); // keep the largest one for reference
+			navigation_process_max = MAX(nav_elapsed, navigation_process_max);
+		}
 
-	message_queue->flush();
+		message_queue->flush();
 #endif // !defined(NAVIGATION_2D_DISABLED) || !defined(NAVIGATION_3D_DISABLED)
+	} // end !p_dry_run (skip _physics_process and navigation)
 
 #ifndef PHYSICS_3D_DISABLED
 	GodotProfileZoneGrouped(_profile_zone, "3D physics");
@@ -5002,10 +5038,16 @@ bool Main::physics_iteration_step(double p_physics_step, double p_time_scale) {
 	PhysicsServer2D::get_singleton()->step(p_physics_step * p_time_scale);
 #endif // PHYSICS_2D_DISABLED
 
-	message_queue->flush();
+	// Dry-run: skip message-queue flush and iteration_end.
+	if (!p_dry_run) {
+		message_queue->flush();
 
-	GodotProfileZoneGrouped(_profile_zone, "main loop iteration end");
-	OS::get_singleton()->get_main_loop()->iteration_end();
+		MainLoop *ml = OS::get_singleton()->get_main_loop();
+		if (ml != nullptr) {
+			GodotProfileZoneGrouped(_profile_zone, "main loop iteration end");
+			ml->iteration_end();
+		}
+	}
 
 	{
 		const uint64_t phys_elapsed = OS::get_singleton()->get_ticks_usec() - physics_begin;
@@ -5014,6 +5056,19 @@ bool Main::physics_iteration_step(double p_physics_step, double p_time_scale) {
 	}
 
 	Engine::get_singleton()->_in_physics = false;
+
+	// --- Dry-run invariant assertions ---
+#ifdef DEV_ENABLED
+	if (p_dry_run) {
+		// Invariant A: physics_frames must not have advanced.
+		DEV_ASSERT(Engine::get_singleton()->get_physics_frames() == frames_before);
+		// Invariant B: Input action edges must not have been consumed.
+		const uint64_t input_edge_fingerprint_after =
+				(Input::get_singleton() != nullptr) ? Input::get_singleton()->get_action_edge_fingerprint() : 0;
+		DEV_ASSERT(input_edge_fingerprint_after == input_edge_fingerprint_before);
+	}
+#endif // DEV_ENABLED
+
 	return false;
 }
 
@@ -5279,6 +5334,11 @@ void Main::cleanup(bool p_force) {
 	message_queue->flush();
 
 	OS::get_singleton()->delete_main_loop();
+
+	// Clear the manual-physics callback so a stale function pointer cannot be
+	// dereferenced after the main loop is gone. Must be after delete_main_loop()
+	// and before finalize_physics() (forward-note from PR #10 security audit).
+	Engine::get_singleton()->set_manual_physics_iteration_callback(nullptr);
 
 	OS::get_singleton()->_cmdline.clear();
 	OS::get_singleton()->_user_args.clear();
