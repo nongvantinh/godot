@@ -35,6 +35,7 @@
 #include "godot_collision_solver_2d.h"
 
 #include "core/debugger/engine_debugger.h"
+#include "core/io/marshalls.h"
 #include "core/os/os.h"
 
 #define FLUSH_QUERY_CHECK(m_object) \
@@ -1328,6 +1329,302 @@ void GodotPhysicsServer2D::space_flush_queries(RID p_space) {
 	flushing_queries = true;
 	space->call_queries();
 	flushing_queries = false;
+}
+
+// ---------------------------------------------------------------------------
+// State snapshot helpers — GodotPhysics 2D (PARTIAL fidelity)
+// ---------------------------------------------------------------------------
+//
+// See the companion 3D implementation for a full design description.
+// Blob format: GPSS header (dim=2, backend=0) + BODIES section + AREAS section.
+
+static const uint8_t GPSS_MAGIC_GP2[4] = { 'G', 'P', 'S', 'S' };
+static const uint8_t GPSS_DIM_2D = 2;
+static const uint8_t GPSS_VERSION_GP2 = 1;
+static const uint8_t GPSS_BACKEND_GODOT2 = 0;
+static const uint16_t GPSS_SEC_BODIES_GP2 = 2;
+static const uint16_t GPSS_SEC_AREAS_GP2 = 3;
+static const int GPSS_HDR_SIZE2 = 12;
+static const int GPSS_SEC_HDR_SIZE2 = 6;
+
+// Per-body record 2D: rid_id(8) + transform2d(24) + linear_vel(8) + angular_vel(4) + active(1) = 45 bytes
+static const int GP2D_BODY_RECORD_SIZE = 45;
+// Per-area record 2D: rid_id(8) + transform2d(24) = 32 bytes
+static const int GP2D_AREA_RECORD_SIZE = 32;
+
+static void _write_float2(uint8_t *dst, float v) {
+	uint32_t bits;
+	memcpy(&bits, &v, 4);
+	encode_uint32(bits, dst);
+}
+static float _read_float2(const uint8_t *src) {
+	uint32_t bits = decode_uint32(src);
+	float v;
+	memcpy(&v, &bits, 4);
+	return v;
+}
+
+static void _write_vec2(uint8_t *dst, const Vector2 &v) {
+	_write_float2(dst + 0, (float)v.x);
+	_write_float2(dst + 4, (float)v.y);
+}
+static Vector2 _read_vec2(const uint8_t *src) {
+	return Vector2(_read_float2(src + 0), _read_float2(src + 4));
+}
+
+static void _write_transform2d(uint8_t *dst, const Transform2D &t) {
+	_write_vec2(dst + 0, t.columns[0]);
+	_write_vec2(dst + 8, t.columns[1]);
+	_write_vec2(dst + 16, t.columns[2]);
+}
+static Transform2D _read_transform2d(const uint8_t *src) {
+	Transform2D t;
+	t.columns[0] = _read_vec2(src + 0);
+	t.columns[1] = _read_vec2(src + 8);
+	t.columns[2] = _read_vec2(src + 16);
+	return t;
+}
+
+PackedByteArray GodotPhysicsServer2D::space_save_state(RID p_space) {
+	GodotSpace2D *space = space_owner.get_or_null(p_space);
+	ERR_FAIL_NULL_V_MSG(space, PackedByteArray(), "space_save_state: invalid space RID.");
+
+	LocalVector<GodotBody2D *> bodies;
+	LocalVector<GodotArea2D *> areas;
+
+	for (GodotCollisionObject2D *obj : space->get_objects()) {
+		if (obj->get_type() == GodotCollisionObject2D::TYPE_BODY) {
+			bodies.push_back(static_cast<GodotBody2D *>(obj));
+		} else if (obj->get_type() == GodotCollisionObject2D::TYPE_AREA) {
+			areas.push_back(static_cast<GodotArea2D *>(obj));
+		}
+	}
+
+	uint32_t body_count = (uint32_t)bodies.size();
+	uint32_t area_count = (uint32_t)areas.size();
+
+	uint32_t bodies_payload_size = 4 + body_count * (uint32_t)GP2D_BODY_RECORD_SIZE;
+	uint32_t areas_payload_size = 4 + area_count * (uint32_t)GP2D_AREA_RECORD_SIZE;
+	uint32_t section_count = 2;
+
+	int total_size = GPSS_HDR_SIZE2 + GPSS_SEC_HDR_SIZE2 + (int)bodies_payload_size + GPSS_SEC_HDR_SIZE2 + (int)areas_payload_size;
+
+	PackedByteArray blob;
+	blob.resize(total_size);
+	uint8_t *w = blob.ptrw();
+
+	memcpy(w, GPSS_MAGIC_GP2, 4);
+	w[4] = GPSS_DIM_2D;
+	w[5] = GPSS_VERSION_GP2;
+	w[6] = GPSS_BACKEND_GODOT2;
+	w[7] = 0;
+	encode_uint32(section_count, w + 8);
+
+	uint8_t *sp = w + GPSS_HDR_SIZE2;
+	encode_uint16(GPSS_SEC_BODIES_GP2, sp);
+	encode_uint32(bodies_payload_size, sp + 2);
+	sp += GPSS_SEC_HDR_SIZE2;
+
+	encode_uint32(body_count, sp);
+	sp += 4;
+	for (GodotBody2D *body : bodies) {
+		encode_uint64(body->get_self().get_id(), sp);
+		_write_transform2d(sp + 8, body->get_transform());
+		_write_vec2(sp + 32, body->get_linear_velocity());
+		_write_float2(sp + 40, (float)body->get_angular_velocity());
+		sp[44] = body->is_active() ? 1 : 0;
+		sp += GP2D_BODY_RECORD_SIZE;
+	}
+
+	encode_uint16(GPSS_SEC_AREAS_GP2, sp);
+	encode_uint32(areas_payload_size, sp + 2);
+	sp += GPSS_SEC_HDR_SIZE2;
+
+	encode_uint32(area_count, sp);
+	sp += 4;
+	for (GodotArea2D *area : areas) {
+		encode_uint64(area->get_self().get_id(), sp);
+		_write_transform2d(sp + 8, area->get_transform());
+		sp += GP2D_AREA_RECORD_SIZE;
+	}
+
+	return blob;
+}
+
+bool GodotPhysicsServer2D::space_restore_state(RID p_space, const PackedByteArray &p_state) {
+	GodotSpace2D *space = space_owner.get_or_null(p_space);
+	ERR_FAIL_NULL_V_MSG(space, false, "space_restore_state: invalid space RID.");
+
+	const uint8_t *r = p_state.ptr();
+	int64_t size = p_state.size();
+
+	if (size < GPSS_HDR_SIZE2) {
+		WARN_PRINT("space_restore_state: blob too small for header.");
+		return false;
+	}
+	if (memcmp(r, GPSS_MAGIC_GP2, 4) != 0) {
+		WARN_PRINT("space_restore_state: wrong magic bytes.");
+		return false;
+	}
+	if (r[4] != GPSS_DIM_2D) {
+		WARN_PRINT("space_restore_state: dimension mismatch (blob is not a 2D space snapshot).");
+		return false;
+	}
+	if (r[5] != GPSS_VERSION_GP2) {
+		WARN_PRINT("space_restore_state: unsupported format version.");
+		return false;
+	}
+	if (r[6] != GPSS_BACKEND_GODOT2) {
+		WARN_PRINT("space_restore_state: backend id mismatch (blob was not written by the GodotPhysics backend).");
+		return false;
+	}
+	if (r[7] != 0) {
+		WARN_PRINT("space_restore_state: reserved byte is non-zero.");
+		return false;
+	}
+
+	uint32_t section_count = decode_uint32(r + 8);
+	int64_t pos = GPSS_HDR_SIZE2;
+
+	struct BodyRecord2D {
+		uint64_t rid_id;
+		Transform2D transform;
+		Vector2 linear_velocity;
+		real_t angular_velocity;
+		bool active;
+	};
+	struct AreaRecord2D {
+		uint64_t rid_id;
+		Transform2D transform;
+	};
+
+	LocalVector<BodyRecord2D> staged_bodies;
+	LocalVector<AreaRecord2D> staged_areas;
+	bool bodies_parsed = false;
+	bool areas_parsed = false;
+
+	for (uint32_t i = 0; i < section_count; i++) {
+		if (pos + GPSS_SEC_HDR_SIZE2 > size) {
+			WARN_PRINT("space_restore_state: section header truncated.");
+			return false;
+		}
+		uint16_t tag = decode_uint16(r + pos);
+		uint32_t sec_len = decode_uint32(r + pos + 2);
+		pos += GPSS_SEC_HDR_SIZE2;
+
+		if ((int64_t)sec_len > size - pos) {
+			WARN_PRINT("space_restore_state: section length exceeds remaining buffer.");
+			return false;
+		}
+
+		if (tag == GPSS_SEC_BODIES_GP2) {
+			const uint8_t *sp = r + pos;
+			const uint8_t *sp_end = sp + sec_len;
+			if (sec_len < 4) {
+				WARN_PRINT("space_restore_state: BODIES section too small.");
+				return false;
+			}
+			uint32_t body_count = decode_uint32(sp);
+			sp += 4;
+			if ((uint64_t)body_count * GP2D_BODY_RECORD_SIZE > (uint64_t)(sp_end - sp)) {
+				WARN_PRINT("space_restore_state: body count overflows section payload.");
+				return false;
+			}
+			staged_bodies.resize(body_count);
+			for (uint32_t bi = 0; bi < body_count; bi++) {
+				staged_bodies[bi].rid_id = decode_uint64(sp);
+				staged_bodies[bi].transform = _read_transform2d(sp + 8);
+				staged_bodies[bi].linear_velocity = _read_vec2(sp + 32);
+				staged_bodies[bi].angular_velocity = (real_t)_read_float2(sp + 40);
+				staged_bodies[bi].active = (sp[44] != 0);
+				sp += GP2D_BODY_RECORD_SIZE;
+			}
+			bodies_parsed = true;
+		} else if (tag == GPSS_SEC_AREAS_GP2) {
+			const uint8_t *sp = r + pos;
+			const uint8_t *sp_end = sp + sec_len;
+			if (sec_len < 4) {
+				WARN_PRINT("space_restore_state: AREAS section too small.");
+				return false;
+			}
+			uint32_t area_count = decode_uint32(sp);
+			sp += 4;
+			if ((uint64_t)area_count * GP2D_AREA_RECORD_SIZE > (uint64_t)(sp_end - sp)) {
+				WARN_PRINT("space_restore_state: area count overflows section payload.");
+				return false;
+			}
+			staged_areas.resize(area_count);
+			for (uint32_t ai = 0; ai < area_count; ai++) {
+				staged_areas[ai].rid_id = decode_uint64(sp);
+				staged_areas[ai].transform = _read_transform2d(sp + 8);
+				sp += GP2D_AREA_RECORD_SIZE;
+			}
+			areas_parsed = true;
+		}
+		pos += (int64_t)sec_len;
+	}
+
+	if (pos != size) {
+		WARN_PRINT("space_restore_state: trailing garbage after sections.");
+		return false;
+	}
+	if (!bodies_parsed) {
+		WARN_PRINT("space_restore_state: no BODIES section found in blob.");
+		return false;
+	}
+
+	// Apply staged data.
+	for (const BodyRecord2D &rec : staged_bodies) {
+		RID rid = RID::from_uint64(rec.rid_id);
+		GodotBody2D *body = body_owner.get_or_null(rid);
+		if (!body || body->get_space() != space) {
+			continue;
+		}
+		body->set_state(BODY_STATE_TRANSFORM, rec.transform);
+		body->set_linear_velocity(rec.linear_velocity);
+		body->set_angular_velocity(rec.angular_velocity);
+		body->set_active(rec.active);
+	}
+
+	if (areas_parsed) {
+		for (const AreaRecord2D &rec : staged_areas) {
+			RID rid = RID::from_uint64(rec.rid_id);
+			GodotArea2D *area = area_owner.get_or_null(rid);
+			if (!area || area->get_space() != space) {
+				continue;
+			}
+			area->set_transform(rec.transform);
+		}
+	}
+
+	return true;
+}
+
+void GodotPhysicsServer2D::space_reset(RID p_space) {
+	GodotSpace2D *space = space_owner.get_or_null(p_space);
+	ERR_FAIL_NULL_MSG(space, "space_reset: invalid space RID.");
+
+	// Guard: preserve the space's default area so the space remains valid and
+	// immediately usable after reset (spec Q-C). Mirror Jolt's guard.
+	GodotArea2D *default_area = space->get_default_area();
+
+	LocalVector<GodotCollisionObject2D *> objs;
+	for (GodotCollisionObject2D *obj : space->get_objects()) {
+		if (obj == static_cast<GodotCollisionObject2D *>(default_area)) {
+			continue;
+		}
+		objs.push_back(obj);
+	}
+	for (GodotCollisionObject2D *obj : objs) {
+		obj->set_space(nullptr);
+	}
+}
+
+int GodotPhysicsServer2D::space_get_feature(RID p_space, SpaceFeature p_feature) const {
+	if (p_feature == FEATURE_STATE_SNAPSHOT) {
+		return SPACE_FEATURE_PARTIAL;
+	}
+	return SPACE_FEATURE_NONE;
 }
 
 void GodotPhysicsServer2D::sync() {

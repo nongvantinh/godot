@@ -726,6 +726,10 @@ void PhysicsServer3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("space_step", "space", "delta"), &PhysicsServer3D::space_step);
 	ClassDB::bind_method(D_METHOD("space_flush_queries", "space"), &PhysicsServer3D::space_flush_queries);
 	ClassDB::bind_method(D_METHOD("space_step_safe", "space", "delta"), &PhysicsServer3D::space_step_safe);
+	ClassDB::bind_method(D_METHOD("space_save_state", "space"), &PhysicsServer3D::space_save_state);
+	ClassDB::bind_method(D_METHOD("space_restore_state", "space", "state"), &PhysicsServer3D::space_restore_state);
+	ClassDB::bind_method(D_METHOD("space_reset", "space"), &PhysicsServer3D::space_reset);
+	ClassDB::bind_method(D_METHOD("space_get_feature", "space", "feature"), &PhysicsServer3D::space_get_feature);
 
 	ClassDB::bind_method(D_METHOD("area_create"), &PhysicsServer3D::area_create);
 	ClassDB::bind_method(D_METHOD("area_set_space", "area", "space"), &PhysicsServer3D::area_set_space);
@@ -1135,6 +1139,12 @@ void PhysicsServer3D::_bind_methods() {
 	BIND_ENUM_CONSTANT(BODY_AXIS_ANGULAR_X);
 	BIND_ENUM_CONSTANT(BODY_AXIS_ANGULAR_Y);
 	BIND_ENUM_CONSTANT(BODY_AXIS_ANGULAR_Z);
+
+	BIND_ENUM_CONSTANT(FEATURE_STATE_SNAPSHOT);
+
+	BIND_ENUM_CONSTANT(SPACE_FEATURE_NONE);
+	BIND_ENUM_CONSTANT(SPACE_FEATURE_PARTIAL);
+	BIND_ENUM_CONSTANT(SPACE_FEATURE_FULL);
 
 #endif
 }

@@ -822,6 +822,21 @@ public:
 	virtual void space_flush_queries(RID p_space) = 0;
 	virtual void space_step_safe(RID p_space, real_t p_delta);
 
+	enum SpaceFeature {
+		FEATURE_STATE_SNAPSHOT = 0,
+	};
+
+	enum SpaceFeatureSupport {
+		SPACE_FEATURE_NONE = 0,
+		SPACE_FEATURE_PARTIAL = 1,
+		SPACE_FEATURE_FULL = 2,
+	};
+
+	virtual PackedByteArray space_save_state(RID p_space) = 0;
+	virtual bool space_restore_state(RID p_space, const PackedByteArray &p_state) = 0;
+	virtual void space_reset(RID p_space) = 0;
+	virtual int space_get_feature(RID p_space, SpaceFeature p_feature) const { return SPACE_FEATURE_NONE; }
+
 	virtual bool is_flushing_queries() const = 0;
 
 	enum ProcessInfo {
@@ -1076,3 +1091,5 @@ VARIANT_ENUM_CAST(PhysicsServer3D::G6DOFJointAxisParam);
 VARIANT_ENUM_CAST(PhysicsServer3D::G6DOFJointAxisFlag);
 VARIANT_ENUM_CAST(PhysicsServer3D::AreaBodyStatus);
 VARIANT_ENUM_CAST(PhysicsServer3D::ProcessInfo);
+VARIANT_ENUM_CAST(PhysicsServer3D::SpaceFeature);
+VARIANT_ENUM_CAST(PhysicsServer3D::SpaceFeatureSupport);

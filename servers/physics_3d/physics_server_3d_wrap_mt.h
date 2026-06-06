@@ -139,6 +139,33 @@ public:
 		physics_server_3d->space_step(p_space, p_delta);
 		end_sync();
 	}
+	virtual PackedByteArray space_save_state(RID p_space) override {
+		ERR_FAIL_COND_V_MSG(!Thread::is_main_thread(), PackedByteArray(),
+				"space_save_state must be called from the main thread.");
+		sync();
+		PackedByteArray r = physics_server_3d->space_save_state(p_space);
+		end_sync();
+		return r;
+	}
+	virtual bool space_restore_state(RID p_space, const PackedByteArray &p_state) override {
+		ERR_FAIL_COND_V_MSG(!Thread::is_main_thread(), false,
+				"space_restore_state must be called from the main thread.");
+		sync();
+		bool ok = physics_server_3d->space_restore_state(p_space, p_state);
+		end_sync();
+		return ok;
+	}
+	virtual void space_reset(RID p_space) override {
+		ERR_FAIL_COND_MSG(!Thread::is_main_thread(),
+				"space_reset must be called from the main thread.");
+		sync();
+		physics_server_3d->space_reset(p_space);
+		end_sync();
+	}
+	virtual int space_get_feature(RID p_space, SpaceFeature p_feature) const override {
+		ERR_FAIL_COND_V(!Thread::is_main_thread(), SPACE_FEATURE_NONE);
+		return physics_server_3d->space_get_feature(p_space, p_feature);
+	}
 
 	FUNC2(space_set_debug_contacts, RID, int);
 	virtual Vector<Vector3> space_get_contacts(RID p_space) const override {

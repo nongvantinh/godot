@@ -456,6 +456,10 @@ public:
 
 	EXBIND2(space_step, RID, real_t)
 	EXBIND1(space_flush_queries, RID)
+	EXBIND1R(PackedByteArray, space_save_state, RID)
+	EXBIND2R(bool, space_restore_state, RID, const PackedByteArray &)
+	EXBIND1(space_reset, RID)
+	EXBIND2RC(int, space_get_feature, RID, SpaceFeature)
 
 	EXBIND0RC(bool, is_flushing_queries)
 	EXBIND1R(int, get_process_info, ProcessInfo)

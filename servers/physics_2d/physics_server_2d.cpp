@@ -651,6 +651,10 @@ void PhysicsServer2D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("space_step", "space", "delta"), &PhysicsServer2D::space_step);
 	ClassDB::bind_method(D_METHOD("space_flush_queries", "space"), &PhysicsServer2D::space_flush_queries);
 	ClassDB::bind_method(D_METHOD("space_step_safe", "space", "delta"), &PhysicsServer2D::space_step_safe);
+	ClassDB::bind_method(D_METHOD("space_save_state", "space"), &PhysicsServer2D::space_save_state);
+	ClassDB::bind_method(D_METHOD("space_restore_state", "space", "state"), &PhysicsServer2D::space_restore_state);
+	ClassDB::bind_method(D_METHOD("space_reset", "space"), &PhysicsServer2D::space_reset);
+	ClassDB::bind_method(D_METHOD("space_get_feature", "space", "feature"), &PhysicsServer2D::space_get_feature);
 
 	ClassDB::bind_method(D_METHOD("area_create"), &PhysicsServer2D::area_create);
 	ClassDB::bind_method(D_METHOD("area_set_space", "area", "space"), &PhysicsServer2D::area_set_space);
@@ -902,6 +906,12 @@ void PhysicsServer2D::_bind_methods() {
 	BIND_ENUM_CONSTANT(INFO_ACTIVE_OBJECTS);
 	BIND_ENUM_CONSTANT(INFO_COLLISION_PAIRS);
 	BIND_ENUM_CONSTANT(INFO_ISLAND_COUNT);
+
+	BIND_ENUM_CONSTANT(FEATURE_STATE_SNAPSHOT);
+
+	BIND_ENUM_CONSTANT(SPACE_FEATURE_NONE);
+	BIND_ENUM_CONSTANT(SPACE_FEATURE_PARTIAL);
+	BIND_ENUM_CONSTANT(SPACE_FEATURE_FULL);
 }
 
 void PhysicsServer2D::space_step_safe(RID p_space, real_t p_delta) {
