@@ -1518,10 +1518,11 @@
 			<description>
 				Returns an [enum SpaceFeatureSupport] constant describing how well the active physics backend supports the requested [param feature] for the given [param space].
 				Backend support levels:
-				| Backend | [constant FEATURE_STATE_SNAPSHOT] |
-				|---|---|
-				| GodotPhysics3D | [constant SPACE_FEATURE_PARTIAL] |
-				| Jolt Physics | [constant SPACE_FEATURE_FULL] |
+				| Backend | [constant FEATURE_STATE_SNAPSHOT] | [constant FEATURE_STATE_CLONE] | [constant FEATURE_MANUAL_STEP] |
+				|---|---|---|---|
+				| GodotPhysics3D | [constant SPACE_FEATURE_PARTIAL] | [constant SPACE_FEATURE_PARTIAL] | [constant SPACE_FEATURE_FULL] |
+				| Jolt Physics | [constant SPACE_FEATURE_FULL] | [constant SPACE_FEATURE_PARTIAL] | [constant SPACE_FEATURE_FULL] |
+				| Dummy (headless) | [constant SPACE_FEATURE_NONE] | [constant SPACE_FEATURE_NONE] | [constant SPACE_FEATURE_NONE] |
 				[b]Note:[/b] Must be called from the main thread.
 			</description>
 		</method>
@@ -2124,6 +2125,10 @@
 		</constant>
 		<constant name="FEATURE_STATE_CLONE" value="1" enum="SpaceFeature">
 			Feature flag for cross-space state clone support. Pass this to [method space_get_feature] to query the fidelity of [method space_clone_state] for the given space. All backends report [constant SPACE_FEATURE_PARTIAL]: clone copies the Phase-3 field set (transform, linear/angular velocity, sleep state) but does not preserve warm-start or contact-cache state, so the first step after a clone may diverge slightly from the source trajectory.
+		</constant>
+		<constant name="FEATURE_MANUAL_STEP" value="2" enum="SpaceFeature">
+			Feature flag for manual physics stepping support. Pass this to [method space_get_feature] to query whether the active backend supports [method space_step], [method space_step_safe], and [method space_step_batch] for the given space.
+			All three real backends (Jolt Physics, GodotPhysics3D, GodotPhysics2D) report [constant SPACE_FEATURE_FULL]: manual stepping invokes the identical integration path as the automatic physics loop with no fidelity loss. The dummy (headless) server reports [constant SPACE_FEATURE_NONE].
 		</constant>
 		<constant name="SPACE_FEATURE_NONE" value="0" enum="SpaceFeatureSupport">
 			The active backend does not support this feature at all. [method space_save_state] will return an empty array and [method space_restore_state] will return [code]false[/code].
