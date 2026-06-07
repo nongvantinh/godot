@@ -221,6 +221,14 @@ void JoltSpace3D::step(float p_step) {
 	stepping = false;
 }
 
+void JoltSpace3D::save_state(JPH::StateRecorder &p_recorder) const {
+	physics_system->SaveState(p_recorder, JPH::EStateRecorderState::All, nullptr);
+}
+
+bool JoltSpace3D::restore_state(JPH::StateRecorder &p_recorder) {
+	return physics_system->RestoreState(p_recorder, nullptr);
+}
+
 void JoltSpace3D::call_queries() {
 	while (body_call_queries_list.first()) {
 		JoltBody3D *body = body_call_queries_list.first()->self();

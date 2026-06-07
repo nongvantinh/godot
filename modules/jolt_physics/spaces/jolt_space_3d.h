@@ -41,6 +41,7 @@
 #include <Jolt/Physics/Collision/NarrowPhaseQuery.h>
 #include <Jolt/Physics/Constraints/Constraint.h>
 #include <Jolt/Physics/PhysicsSystem.h>
+#include <Jolt/Physics/StateRecorder.h>
 
 class JoltArea3D;
 class JoltBody3D;
@@ -130,6 +131,10 @@ public:
 	void set_default_area(JoltArea3D *p_area) { default_area = p_area; }
 
 	float get_last_step() const { return last_step; }
+
+	// Internal snapshot/restore primitive (Phase 0). Not exposed to GDScript or PhysicsServer3D.
+	void save_state(JPH::StateRecorder &p_recorder) const;
+	bool restore_state(JPH::StateRecorder &p_recorder);
 
 	JPH::Body *add_object(const JoltObject3D &p_object, const JPH::BodyCreationSettings &p_settings, bool p_sleeping = false);
 	JPH::Body *add_object(const JoltObject3D &p_object, const JPH::SoftBodyCreationSettings &p_settings, bool p_sleeping = false);
