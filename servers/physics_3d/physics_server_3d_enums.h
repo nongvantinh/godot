@@ -259,6 +259,24 @@ enum ProcessInfo {
 	INFO_ISLAND_COUNT
 };
 
+// Manual per-space stepping / state snapshot (GH #20).
+enum SpaceFeature {
+	FEATURE_STATE_SNAPSHOT = 0,
+	FEATURE_STATE_CLONE = 1,
+	FEATURE_MANUAL_STEP = 2,
+};
+
+enum SpaceFeatureSupport {
+	SPACE_FEATURE_NONE = 0,
+	SPACE_FEATURE_PARTIAL = 1,
+	SPACE_FEATURE_FULL = 2,
+};
+
+enum SpaceSteppingMode {
+	SPACE_STEPPING_MODE_AUTO = 0,
+	SPACE_STEPPING_MODE_MANUAL = 1,
+};
+
 #ifndef DISABLE_DEPRECATED
 // Graveyard.
 #endif

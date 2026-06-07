@@ -436,6 +436,14 @@ bool Engine::is_embedded_in_editor() const {
 	return embedded_in_editor;
 }
 
+void Engine::set_manual_physics_iteration_callback(ManualPhysicsIterationCallback p_callback) {
+	_manual_physics_iteration_callback = p_callback;
+}
+
+Engine::ManualPhysicsIterationCallback Engine::get_manual_physics_iteration_callback() const {
+	return _manual_physics_iteration_callback;
+}
+
 Engine::Engine() {
 	singleton = this;
 }

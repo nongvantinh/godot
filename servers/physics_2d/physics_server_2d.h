@@ -285,6 +285,29 @@ public:
 	virtual void end_sync() = 0;
 	virtual void finish() = 0;
 
+	virtual void space_step(RID p_space, real_t p_delta) = 0;
+	virtual void space_flush_queries(RID p_space) = 0;
+	virtual void space_step_safe(RID p_space, real_t p_delta);
+	virtual void space_step_batch(const TypedArray<RID> &p_spaces, real_t p_delta);
+
+	// Internal (not script-bound): non-erroring predicate used by space_step_batch
+	// to skip foreign / cross-dimension / invalid RIDs. Default false so unknown
+	// servers fail safe.
+	virtual bool space_is_valid(RID p_space) const { return false; }
+
+	// Per-space stepping policy (GH #20). The SpaceFeature/SpaceFeatureSupport/SpaceSteppingMode
+	// enums live in PhysicsServer2DEnums (PS2DE) alongside the other physics-server enums.
+	// AUTO (default): the engine's automatic loop advances the space. MANUAL: the engine never
+	// advances it automatically; it advances only through space_step(). Orthogonal to space_set_active.
+	virtual void space_set_stepping_mode(RID p_space, PS2DE::SpaceSteppingMode p_mode) = 0;
+	virtual PS2DE::SpaceSteppingMode space_get_stepping_mode(RID p_space) const = 0;
+
+	virtual PackedByteArray space_save_state(RID p_space) = 0;
+	virtual bool space_restore_state(RID p_space, const PackedByteArray &p_state) = 0;
+	virtual bool space_clone_state(RID p_src_space, RID p_dst_space) = 0;
+	virtual void space_reset(RID p_space) = 0;
+	virtual int space_get_feature(RID p_space, PS2DE::SpaceFeature p_feature) const { return PS2DE::SPACE_FEATURE_NONE; }
+
 	virtual bool is_flushing_queries() const = 0;
 
 	virtual int get_process_info(PS2DE::ProcessInfo p_info) = 0;
@@ -309,3 +332,6 @@ VARIANT_ENUM_CAST_EXT(PS2DE::PinJointFlag, PhysicsServer2D::PinJointFlag);
 VARIANT_ENUM_CAST_EXT(PS2DE::DampedSpringParam, PhysicsServer2D::DampedSpringParam);
 VARIANT_ENUM_CAST_EXT(PS2DE::AreaBodyStatus, PhysicsServer2D::AreaBodyStatus);
 VARIANT_ENUM_CAST_EXT(PS2DE::ProcessInfo, PhysicsServer2D::ProcessInfo);
+VARIANT_ENUM_CAST_EXT(PS2DE::SpaceFeature, PhysicsServer2D::SpaceFeature);
+VARIANT_ENUM_CAST_EXT(PS2DE::SpaceFeatureSupport, PhysicsServer2D::SpaceFeatureSupport);
+VARIANT_ENUM_CAST_EXT(PS2DE::SpaceSteppingMode, PhysicsServer2D::SpaceSteppingMode);

@@ -128,6 +128,9 @@ void JoltBody3D::_add_to_space() {
 
 	delete jolt_settings;
 	jolt_settings = nullptr;
+
+	// Track insertion order for space_clone_state ordinal pairing (bodies only).
+	space->body_add_ordered(this);
 }
 
 void JoltBody3D::_enqueue_call_queries() {
@@ -440,6 +443,12 @@ void JoltBody3D::_space_changing() {
 	JoltShapedObject3D::_space_changing();
 
 	sleep_initially = is_sleeping();
+
+	// Deregister from the insertion-order list while the old space is still set
+	// (mirrors the body_add_ordered in _add_to_space). No-op if not attached.
+	if (in_space()) {
+		space->body_remove_ordered(this);
+	}
 
 	_destroy_joint_constraints();
 	_clear_areas();

@@ -108,6 +108,9 @@ public:
 	virtual void space_set_active(RID p_space, bool p_active) override;
 	virtual bool space_is_active(RID p_space) const override;
 
+	virtual void space_set_stepping_mode(RID p_space, PS2DE::SpaceSteppingMode p_mode) override;
+	virtual PS2DE::SpaceSteppingMode space_get_stepping_mode(RID p_space) const override;
+
 	virtual void space_set_param(RID p_space, PS2DE::SpaceParameter p_param, real_t p_value) override;
 	virtual real_t space_get_param(RID p_space, PS2DE::SpaceParameter p_param) const override;
 
@@ -293,6 +296,15 @@ public:
 	virtual void sync() override;
 	virtual void flush_queries() override;
 	virtual void end_sync() override;
+
+	virtual void space_step(RID p_space, real_t p_delta) override;
+	virtual void space_flush_queries(RID p_space) override;
+	virtual PackedByteArray space_save_state(RID p_space) override;
+	virtual bool space_restore_state(RID p_space, const PackedByteArray &p_state) override;
+	virtual bool space_clone_state(RID p_src_space, RID p_dst_space) override;
+	virtual void space_reset(RID p_space) override;
+	virtual int space_get_feature(RID p_space, PS2DE::SpaceFeature p_feature) const override;
+	virtual bool space_is_valid(RID p_space) const override { return space_owner.get_or_null(p_space) != nullptr; }
 	virtual void finish() override;
 
 	virtual bool is_flushing_queries() const override { return flushing_queries; }

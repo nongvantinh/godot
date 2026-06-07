@@ -89,6 +89,10 @@ private:
 	static void _broadphase_unpair(GodotCollisionObject2D *A, int p_subindex_A, GodotCollisionObject2D *B, int p_subindex_B, void *p_data, void *p_self);
 
 	HashSet<GodotCollisionObject2D *> objects;
+	// Insertion-order-stable list of registered objects, maintained in parallel
+	// with the HashSet. Used by space_clone_state to produce a deterministic
+	// ordinal index for each object.
+	LocalVector<GodotCollisionObject2D *> objects_ordered;
 
 	GodotArea2D *area = nullptr;
 
@@ -112,6 +116,8 @@ private:
 	real_t body_time_to_sleep = 0.0;
 
 	bool locked = false;
+
+	PS2DE::SpaceSteppingMode stepping_mode = PS2DE::SPACE_STEPPING_MODE_AUTO;
 
 	real_t last_step = 0.001;
 
@@ -153,6 +159,7 @@ public:
 	void add_object(GodotCollisionObject2D *p_object);
 	void remove_object(GodotCollisionObject2D *p_object);
 	const HashSet<GodotCollisionObject2D *> &get_objects() const;
+	const LocalVector<GodotCollisionObject2D *> &get_objects_ordered() const { return objects_ordered; }
 
 	_FORCE_INLINE_ int get_solver_iterations() const { return solver_iterations; }
 	_FORCE_INLINE_ real_t get_contact_recycle_radius() const { return contact_recycle_radius; }
@@ -184,6 +191,9 @@ public:
 	void set_active_objects(int p_active_objects) { active_objects = p_active_objects; }
 	int get_active_objects() const { return active_objects; }
 
+	void set_stepping_mode(PS2DE::SpaceSteppingMode p_mode) { stepping_mode = p_mode; }
+	PS2DE::SpaceSteppingMode get_stepping_mode() const { return stepping_mode; }
+
 	int get_collision_pairs() const { return collision_pairs; }
 
 	bool test_body_motion(GodotBody2D *p_body, const PS2DT::MotionParameters &p_parameters, PS2DT::MotionResult *r_result);
@@ -197,6 +207,7 @@ public:
 	}
 	_FORCE_INLINE_ Vector<Vector2> get_debug_contacts() { return contact_debug; }
 	_FORCE_INLINE_ int get_debug_contact_count() { return contact_debug_count; }
+	_FORCE_INLINE_ void reset_debug_contact_count() { contact_debug_count = 0; }
 
 	GodotPhysicsDirectSpaceState2D *get_direct_state();
 
