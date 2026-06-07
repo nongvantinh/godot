@@ -387,6 +387,33 @@ public:
 	virtual void end_sync() = 0;
 	virtual void finish() = 0;
 
+	virtual void space_step(RID p_space, real_t p_delta) = 0;
+	virtual void space_flush_queries(RID p_space) = 0;
+	virtual void space_step_safe(RID p_space, real_t p_delta);
+	virtual void space_step_batch(const TypedArray<RID> &p_spaces, real_t p_delta);
+
+	// Internal (not script-bound): non-erroring predicate used by space_step_batch
+	// to skip foreign / cross-dimension / invalid RIDs. Default false so unknown
+	// servers fail safe.
+	virtual bool space_is_valid(RID p_space) const { return false; }
+
+	// Per-space stepping policy: who owns advancement of the space (GH #20). The
+	// SpaceFeature/SpaceFeatureSupport/SpaceSteppingMode enums live in PhysicsServer3DEnums (PS3DE)
+	// alongside the other physics-server enums.
+	// AUTO (default): the engine's automatic physics iteration advances the space.
+	// MANUAL: the engine never advances the space automatically; it advances only through
+	// explicit per-space stepping (space_step). Manual stepping is authoritative, not additive.
+	// Stepping mode is orthogonal to space_set_active: a MANUAL space is still fully active and
+	// queryable, it is simply skipped by the automatic loop.
+	virtual void space_set_stepping_mode(RID p_space, PS3DE::SpaceSteppingMode p_mode) = 0;
+	virtual PS3DE::SpaceSteppingMode space_get_stepping_mode(RID p_space) const = 0;
+
+	virtual PackedByteArray space_save_state(RID p_space) = 0;
+	virtual bool space_restore_state(RID p_space, const PackedByteArray &p_state) = 0;
+	virtual bool space_clone_state(RID p_src_space, RID p_dst_space) = 0;
+	virtual void space_reset(RID p_space) = 0;
+	virtual int space_get_feature(RID p_space, PS3DE::SpaceFeature p_feature) const { return PS3DE::SPACE_FEATURE_NONE; }
+
 	virtual bool is_flushing_queries() const = 0;
 
 	virtual int get_process_info(PS3DE::ProcessInfo p_info) = 0;
@@ -414,3 +441,6 @@ VARIANT_ENUM_CAST_EXT(PS3DE::G6DOFJointAxisParam, PhysicsServer3D::G6DOFJointAxi
 VARIANT_ENUM_CAST_EXT(PS3DE::G6DOFJointAxisFlag, PhysicsServer3D::G6DOFJointAxisFlag);
 VARIANT_ENUM_CAST_EXT(PS3DE::AreaBodyStatus, PhysicsServer3D::AreaBodyStatus);
 VARIANT_ENUM_CAST_EXT(PS3DE::ProcessInfo, PhysicsServer3D::ProcessInfo);
+VARIANT_ENUM_CAST_EXT(PS3DE::SpaceFeature, PhysicsServer3D::SpaceFeature);
+VARIANT_ENUM_CAST_EXT(PS3DE::SpaceFeatureSupport, PhysicsServer3D::SpaceFeatureSupport);
+VARIANT_ENUM_CAST_EXT(PS3DE::SpaceSteppingMode, PhysicsServer3D::SpaceSteppingMode);

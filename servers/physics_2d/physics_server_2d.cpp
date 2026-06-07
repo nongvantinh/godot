@@ -33,6 +33,8 @@
 
 #include "core/config/project_settings.h"
 #include "core/object/class_db.h"
+#include "core/os/thread.h"
+#include "core/variant/typed_array.h"
 
 PhysicsServer2D *PhysicsServer2D::singleton = nullptr;
 
@@ -69,9 +71,22 @@ void PhysicsServer2D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("space_create"), &PhysicsServer2D::space_create);
 	ClassDB::bind_method(D_METHOD("space_set_active", "space", "active"), &PhysicsServer2D::space_set_active);
 	ClassDB::bind_method(D_METHOD("space_is_active", "space"), &PhysicsServer2D::space_is_active);
+	ClassDB::bind_method(D_METHOD("space_set_stepping_mode", "space", "mode"), &PhysicsServer2D::space_set_stepping_mode);
+	ClassDB::bind_method(D_METHOD("space_get_stepping_mode", "space"), &PhysicsServer2D::space_get_stepping_mode);
 	ClassDB::bind_method(D_METHOD("space_set_param", "space", "param", "value"), &PhysicsServer2D::space_set_param);
 	ClassDB::bind_method(D_METHOD("space_get_param", "space", "param"), &PhysicsServer2D::space_get_param);
 	ClassDB::bind_method(D_METHOD("space_get_direct_state", "space"), &PhysicsServer2D::space_get_direct_state);
+	ClassDB::bind_method(D_METHOD("space_step", "space", "delta"), &PhysicsServer2D::space_step);
+	ClassDB::bind_method(D_METHOD("space_flush_queries", "space"), &PhysicsServer2D::space_flush_queries);
+	ClassDB::bind_method(D_METHOD("space_step_safe", "space", "delta"), &PhysicsServer2D::space_step_safe);
+	ClassDB::bind_method(D_METHOD("space_step_batch", "spaces", "delta"), &PhysicsServer2D::space_step_batch);
+	ClassDB::bind_method(D_METHOD("space_save_state", "space"), &PhysicsServer2D::space_save_state);
+	ClassDB::bind_method(D_METHOD("space_restore_state", "space", "state"), &PhysicsServer2D::space_restore_state);
+	ClassDB::bind_method(D_METHOD("space_clone_state", "src_space", "dst_space"), &PhysicsServer2D::space_clone_state);
+	ClassDB::bind_method(D_METHOD("space_reset", "space"), &PhysicsServer2D::space_reset);
+	ClassDB::bind_method(D_METHOD("space_get_feature", "space", "feature"), &PhysicsServer2D::space_get_feature);
+	ClassDB::bind_method(D_METHOD("space_set_debug_contacts", "space", "max_contacts"), &PhysicsServer2D::space_set_debug_contacts);
+	ClassDB::bind_method(D_METHOD("space_get_contact_count", "space"), &PhysicsServer2D::space_get_contact_count);
 
 	ClassDB::bind_method(D_METHOD("area_create"), &PhysicsServer2D::area_create);
 	ClassDB::bind_method(D_METHOD("area_set_space", "area", "space"), &PhysicsServer2D::area_set_space);
@@ -323,6 +338,40 @@ void PhysicsServer2D::_bind_methods() {
 	BIND_ENUM_CONSTANT(PS2DE::INFO_ACTIVE_OBJECTS);
 	BIND_ENUM_CONSTANT(PS2DE::INFO_COLLISION_PAIRS);
 	BIND_ENUM_CONSTANT(PS2DE::INFO_ISLAND_COUNT);
+
+	BIND_ENUM_CONSTANT(PS2DE::FEATURE_STATE_SNAPSHOT);
+	BIND_ENUM_CONSTANT(PS2DE::FEATURE_STATE_CLONE);
+	BIND_ENUM_CONSTANT(PS2DE::FEATURE_MANUAL_STEP);
+
+	BIND_ENUM_CONSTANT(PS2DE::SPACE_FEATURE_NONE);
+	BIND_ENUM_CONSTANT(PS2DE::SPACE_FEATURE_PARTIAL);
+	BIND_ENUM_CONSTANT(PS2DE::SPACE_FEATURE_FULL);
+
+	BIND_ENUM_CONSTANT(PS2DE::SPACE_STEPPING_MODE_AUTO);
+	BIND_ENUM_CONSTANT(PS2DE::SPACE_STEPPING_MODE_MANUAL);
+}
+
+void PhysicsServer2D::space_step_safe(RID p_space, real_t p_delta) {
+	ERR_FAIL_COND_MSG(!Thread::is_main_thread(), "space_step_safe must be called from the main thread.");
+	sync();
+	space_flush_queries(p_space);
+	space_step(p_space, p_delta);
+	end_sync();
+}
+
+void PhysicsServer2D::space_step_batch(const TypedArray<RID> &p_spaces, real_t p_delta) {
+	ERR_FAIL_COND_MSG(!Thread::is_main_thread(), "space_step_batch must be called from the main thread.");
+	if (p_spaces.is_empty()) {
+		return; // empty array -> no-op, no handshake.
+	}
+	sync();
+	for (int i = 0; i < p_spaces.size(); i++) {
+		RID r = p_spaces[i];
+		ERR_CONTINUE(!r.is_valid());
+		space_flush_queries(r);
+		space_step(r, p_delta);
+	}
+	end_sync();
 }
 
 PhysicsServer2D::PhysicsServer2D() {
