@@ -1019,10 +1019,23 @@
 				Overridable version of [method PhysicsServer2D.shape_set_data].
 			</description>
 		</method>
+		<method name="_space_clone_state" qualifiers="virtual required">
+			<return type="bool" />
+			<param index="0" name="src_space" type="RID" />
+			<param index="1" name="dst_space" type="RID" />
+			<description>
+			</description>
+		</method>
 		<method name="_space_create" qualifiers="virtual required">
 			<return type="RID" />
 			<description>
 				Overridable version of [method PhysicsServer2D.space_create].
+			</description>
+		</method>
+		<method name="_space_flush_queries" qualifiers="virtual required">
+			<return type="void" />
+			<param index="0" name="space" type="RID" />
+			<description>
 			</description>
 		</method>
 		<method name="_space_get_contact_count" qualifiers="virtual required const">
@@ -1048,6 +1061,13 @@
 				Overridable version of [method PhysicsServer2D.space_get_direct_state].
 			</description>
 		</method>
+		<method name="_space_get_feature" qualifiers="virtual required const">
+			<return type="int" />
+			<param index="0" name="space" type="RID" />
+			<param index="1" name="feature" type="int" enum="PhysicsServer2D.SpaceFeature" />
+			<description>
+			</description>
+		</method>
 		<method name="_space_get_param" qualifiers="virtual required const">
 			<return type="float" />
 			<param index="0" name="space" type="RID" />
@@ -1061,6 +1081,31 @@
 			<param index="0" name="space" type="RID" />
 			<description>
 				Overridable version of [method PhysicsServer2D.space_is_active].
+			</description>
+		</method>
+		<method name="_space_is_valid" qualifiers="virtual required const">
+			<return type="bool" />
+			<param index="0" name="space" type="RID" />
+			<description>
+			</description>
+		</method>
+		<method name="_space_reset" qualifiers="virtual required">
+			<return type="void" />
+			<param index="0" name="space" type="RID" />
+			<description>
+			</description>
+		</method>
+		<method name="_space_restore_state" qualifiers="virtual required">
+			<return type="bool" />
+			<param index="0" name="space" type="RID" />
+			<param index="1" name="state" type="PackedByteArray" />
+			<description>
+			</description>
+		</method>
+		<method name="_space_save_state" qualifiers="virtual required">
+			<return type="PackedByteArray" />
+			<param index="0" name="space" type="RID" />
+			<description>
 			</description>
 		</method>
 		<method name="_space_set_active" qualifiers="virtual required">
@@ -1087,6 +1132,13 @@
 			<param index="2" name="value" type="float" />
 			<description>
 				Overridable version of [method PhysicsServer2D.space_set_param].
+			</description>
+		</method>
+		<method name="_space_step" qualifiers="virtual required">
+			<return type="void" />
+			<param index="0" name="space" type="RID" />
+			<param index="1" name="delta" type="float" />
+			<description>
 			</description>
 		</method>
 		<method name="_step" qualifiers="virtual required">

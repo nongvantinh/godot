@@ -33,6 +33,7 @@
 #include "core/object/worker_thread_pool.h"
 #include "core/os/thread.h"
 #include "core/templates/command_queue_mt.h"
+#include "core/variant/typed_array.h"
 #include "servers/physics_2d/physics_server_2d.h"
 
 #define ASYNC_COND_PUSH (Thread::get_caller_id() != server_thread && !(doing_sync.is_set() && Thread::is_main_thread()))
@@ -115,6 +116,79 @@ public:
 	PhysicsDirectSpaceState2D *space_get_direct_state(RID p_space) override {
 		ERR_FAIL_COND_V(!Thread::is_main_thread(), nullptr);
 		return physics_server_2d->space_get_direct_state(p_space);
+	}
+
+	// Per-space manual stepping, main-thread-only; caller manages sync bracketing.
+	virtual void space_step(RID p_space, real_t p_delta) override {
+		ERR_FAIL_COND_MSG(!Thread::is_main_thread(), "space_step must be called from the main thread.");
+		physics_server_2d->space_step(p_space, p_delta);
+	}
+	virtual void space_flush_queries(RID p_space) override {
+		ERR_FAIL_COND_MSG(!Thread::is_main_thread(), "space_flush_queries must be called from the main thread.");
+		physics_server_2d->space_flush_queries(p_space);
+	}
+	virtual void space_step_safe(RID p_space, real_t p_delta) override {
+		ERR_FAIL_COND_MSG(!Thread::is_main_thread(), "space_step_safe must be called from the main thread.");
+		sync();
+		physics_server_2d->space_flush_queries(p_space);
+		physics_server_2d->space_step(p_space, p_delta);
+		end_sync();
+	}
+	virtual void space_step_batch(const TypedArray<RID> &p_spaces, real_t p_delta) override {
+		ERR_FAIL_COND_MSG(!Thread::is_main_thread(), "space_step_batch must be called from the main thread.");
+		if (p_spaces.is_empty()) {
+			return; // empty array -> no-op, no handshake.
+		}
+		sync(); // ONE rendezvous for all N spaces
+		for (int i = 0; i < p_spaces.size(); i++) {
+			RID r = p_spaces[i];
+			ERR_CONTINUE_MSG(!r.is_valid(), "space_step_batch: skipping null RID.");
+			ERR_CONTINUE_MSG(!physics_server_2d->space_is_valid(r), "space_step_batch: skipping RID not owned by this physics server (foreign or cross-dimension).");
+			physics_server_2d->space_flush_queries(r);
+			physics_server_2d->space_step(r, p_delta);
+		}
+		end_sync(); // ONE close
+	}
+	virtual PackedByteArray space_save_state(RID p_space) override {
+		ERR_FAIL_COND_V_MSG(!Thread::is_main_thread(), PackedByteArray(),
+				"space_save_state must be called from the main thread.");
+		sync();
+		PackedByteArray r = physics_server_2d->space_save_state(p_space);
+		end_sync();
+		return r;
+	}
+	virtual bool space_restore_state(RID p_space, const PackedByteArray &p_state) override {
+		ERR_FAIL_COND_V_MSG(!Thread::is_main_thread(), false,
+				"space_restore_state must be called from the main thread.");
+		sync();
+		bool ok = physics_server_2d->space_restore_state(p_space, p_state);
+		end_sync();
+		return ok;
+	}
+	virtual bool space_clone_state(RID p_src_space, RID p_dst_space) override {
+		// Single critical section: hold the physics lock across the full
+		// src-read and dst-write so no state can advance between them.
+		ERR_FAIL_COND_V_MSG(!Thread::is_main_thread(), false,
+				"space_clone_state must be called from the main thread.");
+		sync();
+		bool ok = physics_server_2d->space_clone_state(p_src_space, p_dst_space);
+		end_sync();
+		return ok;
+	}
+	virtual void space_reset(RID p_space) override {
+		ERR_FAIL_COND_MSG(!Thread::is_main_thread(),
+				"space_reset must be called from the main thread.");
+		sync();
+		physics_server_2d->space_reset(p_space);
+		end_sync();
+	}
+	virtual int space_get_feature(RID p_space, SpaceFeature p_feature) const override {
+		ERR_FAIL_COND_V(!Thread::is_main_thread(), SPACE_FEATURE_NONE);
+		return physics_server_2d->space_get_feature(p_space, p_feature);
+	}
+	virtual bool space_is_valid(RID p_space) const override {
+		ERR_FAIL_COND_V(!Thread::is_main_thread(), false);
+		return physics_server_2d->space_is_valid(p_space);
 	}
 
 	FUNC2(space_set_debug_contacts, RID, int);

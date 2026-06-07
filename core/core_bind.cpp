@@ -1891,6 +1891,18 @@ void ClassDB::_bind_methods() {
 
 ////// Engine //////
 
+bool Engine::physics_iteration(double p_delta, bool p_dry_run) {
+	ERR_FAIL_COND_V_MSG(!GLOBAL_GET("physics/common/manual_physics_stepping"), false, "physics_iteration() requires ProjectSettings.physics/common/manual_physics_stepping = true.");
+
+	::Engine::ManualPhysicsIterationCallback cb = ::Engine::get_singleton()->get_manual_physics_iteration_callback();
+	ERR_FAIL_NULL_V_MSG(cb, false, "physics_iteration() called before the main loop is initialized.");
+
+	ERR_FAIL_COND_V_MSG(!Math::is_finite(p_delta) || p_delta < 0.0, false, "physics_iteration() requires a finite, non-negative delta.");
+
+	const double time_scale = ::Engine::get_singleton()->get_effective_time_scale();
+	return cb(p_delta, time_scale, p_dry_run);
+}
+
 void Engine::set_physics_ticks_per_second(int p_ips) {
 	::Engine::get_singleton()->set_physics_ticks_per_second(p_ips);
 }
@@ -2097,6 +2109,8 @@ void Engine::get_argument_options(const StringName &p_function, int p_idx, List<
 #endif
 
 void Engine::_bind_methods() {
+	ClassDB::bind_method(D_METHOD("physics_iteration", "delta", "dry_run"), &Engine::physics_iteration, DEFVAL(false));
+
 	ClassDB::bind_method(D_METHOD("set_physics_ticks_per_second", "physics_ticks_per_second"), &Engine::set_physics_ticks_per_second);
 	ClassDB::bind_method(D_METHOD("get_physics_ticks_per_second"), &Engine::get_physics_ticks_per_second);
 	ClassDB::bind_method(D_METHOD("set_max_physics_steps_per_frame", "max_physics_steps"), &Engine::set_max_physics_steps_per_frame);

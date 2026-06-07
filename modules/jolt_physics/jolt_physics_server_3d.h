@@ -428,6 +428,22 @@ public:
 	virtual void flush_queries() override;
 	virtual bool is_flushing_queries() const override;
 
+	virtual void space_step(RID p_space, real_t p_delta) override;
+	virtual void space_flush_queries(RID p_space) override;
+
+	// thread-direct stepping for isolated Jolt spaces only.
+	// Bypasses WrapMT entirely; callable from a worker thread.
+	// The space must have been promoted via space_make_isolated() before calling.
+	// the WrapMT live-space guard is NOT relaxed; this path is only for isolated spaces.
+	void space_make_isolated(RID p_space);
+	void space_step_isolated(RID p_space, real_t p_delta);
+	virtual PackedByteArray space_save_state(RID p_space) override;
+	virtual bool space_restore_state(RID p_space, const PackedByteArray &p_state) override;
+	virtual bool space_clone_state(RID p_src_space, RID p_dst_space) override;
+	virtual void space_reset(RID p_space) override;
+	virtual int space_get_feature(RID p_space, SpaceFeature p_feature) const override;
+	virtual bool space_is_valid(RID p_space) const override { return space_owner.get_or_null(p_space) != nullptr; }
+
 	virtual int get_process_info(PhysicsServer3D::ProcessInfo p_process_info) override;
 
 	bool is_on_separate_thread() const { return on_separate_thread; }

@@ -85,6 +85,10 @@ private:
 	static void _broadphase_unpair(GodotCollisionObject3D *A, int p_subindex_A, GodotCollisionObject3D *B, int p_subindex_B, void *p_data, void *p_self);
 
 	HashSet<GodotCollisionObject3D *> objects;
+	// Insertion-order-stable list of registered objects, maintained in parallel
+	// with the HashSet. Used by space_clone_state to produce a deterministic
+	// ordinal index for each object. Never iterate objects directly for clone ops.
+	LocalVector<GodotCollisionObject3D *> objects_ordered;
 
 	GodotArea3D *area = nullptr;
 
@@ -154,6 +158,7 @@ public:
 	void add_object(GodotCollisionObject3D *p_object);
 	void remove_object(GodotCollisionObject3D *p_object);
 	const HashSet<GodotCollisionObject3D *> &get_objects() const;
+	const LocalVector<GodotCollisionObject3D *> &get_objects_ordered() const { return objects_ordered; }
 
 	_FORCE_INLINE_ int get_solver_iterations() const { return solver_iterations; }
 	_FORCE_INLINE_ real_t get_contact_recycle_radius() const { return contact_recycle_radius; }
@@ -197,6 +202,7 @@ public:
 	}
 	_FORCE_INLINE_ Vector<Vector3> get_debug_contacts() { return contact_debug; }
 	_FORCE_INLINE_ int get_debug_contact_count() { return contact_debug_count; }
+	_FORCE_INLINE_ void reset_debug_contact_count() { contact_debug_count = 0; }
 
 	void set_static_global_body(RID p_body) { static_global_body = p_body; }
 	RID get_static_global_body() { return static_global_body; }

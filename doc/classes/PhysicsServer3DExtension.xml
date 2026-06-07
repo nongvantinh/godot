@@ -1252,8 +1252,21 @@
 			<description>
 			</description>
 		</method>
+		<method name="_space_clone_state" qualifiers="virtual required">
+			<return type="bool" />
+			<param index="0" name="src_space" type="RID" />
+			<param index="1" name="dst_space" type="RID" />
+			<description>
+			</description>
+		</method>
 		<method name="_space_create" qualifiers="virtual required">
 			<return type="RID" />
+			<description>
+			</description>
+		</method>
+		<method name="_space_flush_queries" qualifiers="virtual required">
+			<return type="void" />
+			<param index="0" name="space" type="RID" />
 			<description>
 			</description>
 		</method>
@@ -1275,6 +1288,13 @@
 			<description>
 			</description>
 		</method>
+		<method name="_space_get_feature" qualifiers="virtual required const">
+			<return type="int" />
+			<param index="0" name="space" type="RID" />
+			<param index="1" name="feature" type="int" enum="PhysicsServer3D.SpaceFeature" />
+			<description>
+			</description>
+		</method>
 		<method name="_space_get_param" qualifiers="virtual required const">
 			<return type="float" />
 			<param index="0" name="space" type="RID" />
@@ -1284,6 +1304,31 @@
 		</method>
 		<method name="_space_is_active" qualifiers="virtual required const">
 			<return type="bool" />
+			<param index="0" name="space" type="RID" />
+			<description>
+			</description>
+		</method>
+		<method name="_space_is_valid" qualifiers="virtual required const">
+			<return type="bool" />
+			<param index="0" name="space" type="RID" />
+			<description>
+			</description>
+		</method>
+		<method name="_space_reset" qualifiers="virtual required">
+			<return type="void" />
+			<param index="0" name="space" type="RID" />
+			<description>
+			</description>
+		</method>
+		<method name="_space_restore_state" qualifiers="virtual required">
+			<return type="bool" />
+			<param index="0" name="space" type="RID" />
+			<param index="1" name="state" type="PackedByteArray" />
+			<description>
+			</description>
+		</method>
+		<method name="_space_save_state" qualifiers="virtual required">
+			<return type="PackedByteArray" />
 			<param index="0" name="space" type="RID" />
 			<description>
 			</description>
@@ -1307,6 +1352,13 @@
 			<param index="0" name="space" type="RID" />
 			<param index="1" name="param" type="int" enum="PhysicsServer3D.SpaceParameter" />
 			<param index="2" name="value" type="float" />
+			<description>
+			</description>
+		</method>
+		<method name="_space_step" qualifiers="virtual required">
+			<return type="void" />
+			<param index="0" name="space" type="RID" />
+			<param index="1" name="delta" type="float" />
 			<description>
 			</description>
 		</method>

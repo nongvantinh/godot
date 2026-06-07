@@ -615,6 +615,34 @@ public:
 	virtual void end_sync() = 0;
 	virtual void finish() = 0;
 
+	virtual void space_step(RID p_space, real_t p_delta) = 0;
+	virtual void space_flush_queries(RID p_space) = 0;
+	virtual void space_step_safe(RID p_space, real_t p_delta);
+	virtual void space_step_batch(const TypedArray<RID> &p_spaces, real_t p_delta);
+
+	// Internal (not script-bound): non-erroring predicate used by space_step_batch
+	// to skip foreign / cross-dimension / invalid RIDs. Default false so unknown
+	// servers fail safe.
+	virtual bool space_is_valid(RID p_space) const { return false; }
+
+	enum SpaceFeature {
+		FEATURE_STATE_SNAPSHOT = 0,
+		FEATURE_STATE_CLONE = 1,
+		FEATURE_MANUAL_STEP = 2,
+	};
+
+	enum SpaceFeatureSupport {
+		SPACE_FEATURE_NONE = 0,
+		SPACE_FEATURE_PARTIAL = 1,
+		SPACE_FEATURE_FULL = 2,
+	};
+
+	virtual PackedByteArray space_save_state(RID p_space) = 0;
+	virtual bool space_restore_state(RID p_space, const PackedByteArray &p_state) = 0;
+	virtual bool space_clone_state(RID p_src_space, RID p_dst_space) = 0;
+	virtual void space_reset(RID p_space) = 0;
+	virtual int space_get_feature(RID p_space, SpaceFeature p_feature) const { return SPACE_FEATURE_NONE; }
+
 	virtual bool is_flushing_queries() const = 0;
 
 	enum ProcessInfo {
@@ -861,3 +889,5 @@ VARIANT_ENUM_CAST(PhysicsServer2D::PinJointFlag);
 VARIANT_ENUM_CAST(PhysicsServer2D::DampedSpringParam);
 VARIANT_ENUM_CAST(PhysicsServer2D::AreaBodyStatus);
 VARIANT_ENUM_CAST(PhysicsServer2D::ProcessInfo);
+VARIANT_ENUM_CAST(PhysicsServer2D::SpaceFeature);
+VARIANT_ENUM_CAST(PhysicsServer2D::SpaceFeatureSupport);

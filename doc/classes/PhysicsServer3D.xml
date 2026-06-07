@@ -1381,10 +1381,56 @@
 				Requests that the physics server updates the rendering server with the latest positions of the given soft body's points through the [param rendering_server_handler] interface.
 			</description>
 		</method>
+		<method name="space_clone_state">
+			<return type="bool" />
+			<param index="0" name="src_space" type="RID" />
+			<param index="1" name="dst_space" type="RID" />
+			<description>
+				Copies the physics state of every body in [param src_space] into the corresponding body in [param dst_space], matched by registration order (ordinal index). Returns [code]true[/code] on success; [code]false[/code] if either RID is invalid, [param src_space] and [param dst_space] are the same space, or the body counts differ.
+				The clone is state-only: transform, linear velocity, angular velocity, and sleep/active state are copied. No bodies, areas, or joints are created or destroyed. The caller must pre-populate [param dst_space] with the same number of bodies in the same creation order as [param src_space].
+				Clone fidelity is [constant SPACE_FEATURE_PARTIAL] on all backends (query via [method space_get_feature] with [constant FEATURE_STATE_CLONE]). Warm-start and contact-cache state is not preserved across spaces, so the first step after a clone may diverge from the source trajectory before converging.
+				The error mode is all-or-nothing: if body counts differ, a warning is printed and no body in [param dst_space] is modified.
+				[b]Note:[/b] Must be called from the main thread.
+				[codeblocks]
+				[gdscript]
+				var src = PhysicsServer3D.space_create()
+				PhysicsServer3D.space_set_active(src, true)
+				var dst = PhysicsServer3D.space_create()
+				PhysicsServer3D.space_set_active(dst, true)
+				# ... add matching bodies to both spaces in the same order ...
+				var ok: bool = PhysicsServer3D.space_clone_state(src, dst)
+				[/gdscript]
+				[csharp]
+				var src = PhysicsServer3D.SpaceCreate();
+				PhysicsServer3D.SpaceSetActive(src, true);
+				var dst = PhysicsServer3D.SpaceCreate();
+				PhysicsServer3D.SpaceSetActive(dst, true);
+				// ... add matching bodies to both spaces in the same order ...
+				bool ok = PhysicsServer3D.SpaceCloneState(src, dst);
+				[/csharp]
+				[/codeblocks]
+			</description>
+		</method>
 		<method name="space_create">
 			<return type="RID" />
 			<description>
 				Creates a space. A space is a collection of parameters for the physics engine that can be assigned to an area or a body. It can be assigned to an area with [method area_set_space], or to a body with [method body_set_space].
+			</description>
+		</method>
+		<method name="space_flush_queries">
+			<return type="void" />
+			<param index="0" name="space" type="RID" />
+			<description>
+				Flushes deferred query callbacks (e.g. body-entered/body-exited signals) for the given [param space]. Equivalent to one iteration of the per-space flush that the automatic physics loop performs each frame. Must be called from the main thread.
+			</description>
+		</method>
+		<method name="space_get_contact_count" qualifiers="const">
+			<return type="int" />
+			<param index="0" name="space" type="RID" />
+			<description>
+				Returns the number of contact points collected during the last physics step for the given [param space]. The value is reset to zero at the start of each [method space_step] call. Use [method space_set_debug_contacts] to enable contact collection before calling this method.
+				[b]Note:[/b] Contact collection is only compiled into debug builds. In release export templates this always returns [code]0[/code], regardless of [method space_set_debug_contacts].
+				[b]Note:[/b] Must be called from the main thread.
 			</description>
 		</method>
 		<method name="space_get_direct_state">
@@ -1392,6 +1438,21 @@
 			<param index="0" name="space" type="RID" />
 			<description>
 				Returns the state of a space, a [PhysicsDirectSpaceState3D]. This object can be used to make collision/intersection queries.
+			</description>
+		</method>
+		<method name="space_get_feature" qualifiers="const">
+			<return type="int" />
+			<param index="0" name="space" type="RID" />
+			<param index="1" name="feature" type="int" enum="PhysicsServer3D.SpaceFeature" />
+			<description>
+				Returns an [enum SpaceFeatureSupport] constant describing how well the active physics backend supports the requested [param feature] for the given [param space].
+				Backend support levels:
+				| Backend | [constant FEATURE_STATE_SNAPSHOT] | [constant FEATURE_STATE_CLONE] | [constant FEATURE_MANUAL_STEP] |
+				|---|---|---|---|
+				| GodotPhysics3D | [constant SPACE_FEATURE_PARTIAL] | [constant SPACE_FEATURE_PARTIAL] | [constant SPACE_FEATURE_FULL] |
+				| Jolt Physics | [constant SPACE_FEATURE_FULL] | [constant SPACE_FEATURE_PARTIAL] | [constant SPACE_FEATURE_FULL] |
+				| Dummy (headless) | [constant SPACE_FEATURE_NONE] | [constant SPACE_FEATURE_NONE] | [constant SPACE_FEATURE_NONE] |
+				[b]Note:[/b] Must be called from the main thread.
 			</description>
 		</method>
 		<method name="space_get_param" qualifiers="const">
@@ -1409,12 +1470,99 @@
 				Returns whether the space is active.
 			</description>
 		</method>
+		<method name="space_reset">
+			<return type="void" />
+			<param index="0" name="space" type="RID" />
+			<description>
+				Detaches all bodies, areas, and soft bodies from [param space] without freeing their [RID]s. All handles remain valid and can be re-added to the same or a different space afterwards.
+				[b]Note:[/b] Joints are not automatically removed. Remove joints manually before calling this method to avoid dangling references.
+				[b]Note:[/b] Must be called from the main thread.
+				[codeblocks]
+				[gdscript]
+				var space = PhysicsServer3D.space_create()
+				PhysicsServer3D.space_set_active(space, true)
+				var body = PhysicsServer3D.body_create()
+				PhysicsServer3D.body_set_space(body, space)
+				PhysicsServer3D.space_reset(space)
+				# body is now detached; space RID is still valid.
+				[/gdscript]
+				[csharp]
+				var space = PhysicsServer3D.SpaceCreate();
+				PhysicsServer3D.SpaceSetActive(space, true);
+				var body = PhysicsServer3D.BodyCreate();
+				PhysicsServer3D.BodySetSpace(body, space);
+				PhysicsServer3D.SpaceReset(space);
+				// body is now detached; space RID is still valid.
+				[/csharp]
+				[/codeblocks]
+			</description>
+		</method>
+		<method name="space_restore_state">
+			<return type="bool" />
+			<param index="0" name="space" type="RID" />
+			<param index="1" name="state" type="PackedByteArray" />
+			<description>
+				Restores a physics space to the state captured by [method space_save_state]. Returns [code]true[/code] on success, or [code]false[/code] if [param state] is malformed, was produced by a different backend or dimension, or if the backend's restore operation fails internally.
+				The restore is transactional: the blob is fully validated before any live state is mutated. If validation fails the space is left untouched.
+				[b]Note:[/b] GodotPhysics3D only restores body/area transforms and velocities. Contact manifolds and collision caches are not preserved ([constant SPACE_FEATURE_PARTIAL]). Jolt Physics restores the complete simulation state ([constant SPACE_FEATURE_FULL]).
+				[b]Note:[/b] Bodies and areas must already exist in the space. If a RID recorded in the blob is no longer present, that object is silently skipped.
+				[b]Note:[/b] Must be called from the main thread.
+				[codeblocks]
+				[gdscript]
+				var space = PhysicsServer3D.space_create()
+				PhysicsServer3D.space_set_active(space, true)
+				var blob: PackedByteArray = PhysicsServer3D.space_save_state(space)
+				# ... simulate ...
+				var ok: bool = PhysicsServer3D.space_restore_state(space, blob)
+				assert(ok)
+				[/gdscript]
+				[csharp]
+				var space = PhysicsServer3D.SpaceCreate();
+				PhysicsServer3D.SpaceSetActive(space, true);
+				byte[] blob = PhysicsServer3D.SpaceSaveState(space);
+				// ... simulate ...
+				bool ok = PhysicsServer3D.SpaceRestoreState(space, blob);
+				GD.Assert(ok);
+				[/csharp]
+				[/codeblocks]
+			</description>
+		</method>
+		<method name="space_save_state">
+			<return type="PackedByteArray" />
+			<param index="0" name="space" type="RID" />
+			<description>
+				Serializes the current state of [param space] into an opaque binary blob that can later be passed to [method space_restore_state]. Returns an empty [PackedByteArray] on failure (for example, if [param space] is invalid or the active backend does not support snapshots).
+				[b]Note:[/b] GodotPhysics3D serializes body/area transforms and velocities only. Contact manifolds and collision caches are not captured ([constant SPACE_FEATURE_PARTIAL]). Jolt Physics captures the complete simulation state ([constant SPACE_FEATURE_FULL]).
+				[b]Note:[/b] Must be called from the main thread.
+				[codeblocks]
+				[gdscript]
+				var space = PhysicsServer3D.space_create()
+				PhysicsServer3D.space_set_active(space, true)
+				var blob: PackedByteArray = PhysicsServer3D.space_save_state(space)
+				[/gdscript]
+				[csharp]
+				var space = PhysicsServer3D.SpaceCreate();
+				PhysicsServer3D.SpaceSetActive(space, true);
+				byte[] blob = PhysicsServer3D.SpaceSaveState(space);
+				[/csharp]
+				[/codeblocks]
+			</description>
+		</method>
 		<method name="space_set_active">
 			<return type="void" />
 			<param index="0" name="space" type="RID" />
 			<param index="1" name="active" type="bool" />
 			<description>
 				Marks a space as active. It will not have an effect, unless it is assigned to an area or body.
+			</description>
+		</method>
+		<method name="space_set_debug_contacts">
+			<return type="void" />
+			<param index="0" name="space" type="RID" />
+			<param index="1" name="max_contacts" type="int" />
+			<description>
+				Sets the maximum number of contact points that will be collected per physics step for the given [param space]. Contact points are used to drive the physics debug overlay (collision contact visualization). Call [method space_get_contact_count] after a step to read the collected count.
+				[b]Note:[/b] Must be called from the main thread.
 			</description>
 		</method>
 		<method name="space_set_param">
@@ -1424,6 +1572,67 @@
 			<param index="2" name="value" type="float" />
 			<description>
 				Sets the value for a space parameter. A list of available parameters is on the [enum SpaceParameter] constants.
+			</description>
+		</method>
+		<method name="space_step">
+			<return type="void" />
+			<param index="0" name="space" type="RID" />
+			<param index="1" name="delta" type="float" />
+			<description>
+				Advances the physics simulation for the given [param space] by [param delta] seconds. This is a low-level primitive that steps exactly one space on demand. The caller is responsible for ensuring that the command queue has been drained and the physics thread is idle before calling this method (e.g. by calling [method space_step_safe], which manages the synchronization automatically). Must be called from the main thread.
+				[b]Physics interpolation — caller-owned flush:[/b] when [member ProjectSettings.physics/common/physics_interpolation] is enabled, this method deliberately does [b]not[/b] flush the scene-side fixed-timestep-interpolation (FTI) pumps. The FTI state is owned by the [SceneTree] layer, not the physics server, so coupling [method space_step] to the [SceneTree] would break isolated spaces (created without a scene tree). After calling [method space_step] on nodes that participate in physics interpolation, the caller is responsible for flushing interpolation state using [method Node.reset_physics_interpolation] on the affected nodes, or by triggering a [SceneTree] interpolation tick. The high-level [method Engine.physics_iteration] path already performs this flush automatically via [code]SceneTree.iteration_prepare()[/code] and does not require any caller action.
+			</description>
+		</method>
+		<method name="space_step_batch">
+			<return type="void" />
+			<param index="0" name="spaces" type="RID[]" />
+			<param index="1" name="delta" type="float" />
+			<description>
+				Advances N physics spaces by [param delta] seconds under a single main-thread handshake. Batched stepping eliminates the per-space [code]sync()[/code]/[code]end_sync()[/code] rendezvous cost: all spaces are stepped inside one bracket, serially in array order.
+				[b]Contract (batched-under-one-handshake, main-thread):[/b] Must be called from the main thread; guarded by [code]ERR_FAIL_COND_MSG(!Thread::is_main_thread(), ...)[/code] (same rationale as [method space_step_safe]). Empty [param spaces] array is a no-op — no [code]sync()[/code]/[code]end_sync()[/code] handshake is performed. Duplicate RIDs are each stepped as given (no deduplication); appearing twice means stepped twice. An invalid or null RID is skipped with a logged error; the batch continues and the [code]sync[/code]/[code]end_sync[/code] bracket is never left half-open.
+				Does not advance [method Engine.get_physics_frames] (consistent with [method space_step]).
+				[codeblocks]
+				[gdscript]
+				var spaces: Array[RID] = []
+				for i in range(4):
+				    var s = PhysicsServer3D.space_create()
+				    PhysicsServer3D.space_set_active(s, true)
+				    spaces.append(s)
+				# Advance all 4 spaces under one sync/end_sync bracket.
+				PhysicsServer3D.space_step_batch(spaces, 1.0 / 60.0)
+				[/gdscript]
+				[csharp]
+				var spaces = new Godot.Collections.Array&lt;Rid&gt;();
+				for (int i = 0; i &lt; 4; i++) {
+				    var s = PhysicsServer3D.SpaceCreate();
+				    PhysicsServer3D.SpaceSetActive(s, true);
+				    spaces.Add(s);
+				}
+				PhysicsServer3D.SpaceStepBatch(spaces, 1.0f / 60.0f);
+				[/csharp]
+				[/codeblocks]
+			</description>
+		</method>
+		<method name="space_step_safe">
+			<return type="void" />
+			<param index="0" name="space" type="RID" />
+			<param index="1" name="delta" type="float" />
+			<description>
+				Recommended entry point for manually advancing a single physics space. Performs, in order: server-global [code]sync[/code], per-space [method space_flush_queries], per-space [method space_step], then server-global [code]end_sync[/code]. Under [code]run_on_separate_thread = true[/code] the [code]sync[/code] step performs the full cross-thread handshake — draining the command queue and confirming the physics thread has processed all submitted state — before the step runs, so the step never observes stale body transforms. Must be called from the main thread.
+				[codeblocks]
+				[gdscript]
+				var space = PhysicsServer3D.space_create()
+				PhysicsServer3D.space_set_active(space, true)
+				# Advance the space by one fixed step.
+				PhysicsServer3D.space_step_safe(space, 1.0 / 60.0)
+				[/gdscript]
+				[csharp]
+				var space = PhysicsServer3D.SpaceCreate();
+				PhysicsServer3D.SpaceSetActive(space, true);
+				// Advance the space by one fixed step.
+				PhysicsServer3D.SpaceStepSafe(space, 1.0f / 60.0f);
+				[/csharp]
+				[/codeblocks]
 			</description>
 		</method>
 		<method name="sphere_shape_create">
@@ -1911,6 +2120,25 @@
 		<constant name="BODY_AXIS_ANGULAR_Y" value="16" enum="BodyAxis">
 		</constant>
 		<constant name="BODY_AXIS_ANGULAR_Z" value="32" enum="BodyAxis">
+		</constant>
+		<constant name="FEATURE_STATE_SNAPSHOT" value="0" enum="SpaceFeature">
+			Feature flag for state snapshot support. Pass this to [method space_get_feature] to query whether the active backend can save and restore the complete simulation state via [method space_save_state] and [method space_restore_state].
+		</constant>
+		<constant name="FEATURE_STATE_CLONE" value="1" enum="SpaceFeature">
+			Feature flag for cross-space state clone support. Pass this to [method space_get_feature] to query the fidelity of [method space_clone_state] for the given space. All backends report [constant SPACE_FEATURE_PARTIAL]: clone copies body transform, linear/angular velocity, and sleep/active state, but does not preserve warm-start or contact-cache state, so the first step after a clone may diverge slightly from the source trajectory.
+		</constant>
+		<constant name="FEATURE_MANUAL_STEP" value="2" enum="SpaceFeature">
+			Feature flag for manual physics stepping support. Pass this to [method space_get_feature] to query whether the active backend supports [method space_step], [method space_step_safe], and [method space_step_batch] for the given space.
+			All three real backends (Jolt Physics, GodotPhysics3D, GodotPhysics2D) report [constant SPACE_FEATURE_FULL]: manual stepping invokes the identical integration path as the automatic physics loop with no fidelity loss. The dummy (headless) server reports [constant SPACE_FEATURE_NONE].
+		</constant>
+		<constant name="SPACE_FEATURE_NONE" value="0" enum="SpaceFeatureSupport">
+			The active backend does not support this feature at all. [method space_save_state] will return an empty array and [method space_restore_state] will return [code]false[/code].
+		</constant>
+		<constant name="SPACE_FEATURE_PARTIAL" value="1" enum="SpaceFeatureSupport">
+			The active backend partially supports this feature. For [constant FEATURE_STATE_SNAPSHOT], GodotPhysics serializes body and area transforms and velocities, but does not preserve contact manifolds or collision caches. The simulation may behave slightly differently after a restore compared to a never-interrupted run.
+		</constant>
+		<constant name="SPACE_FEATURE_FULL" value="2" enum="SpaceFeatureSupport">
+			The active backend fully supports this feature. For [constant FEATURE_STATE_SNAPSHOT], Jolt Physics captures and restores the complete simulation state including all internal caches, producing a bit-exact replay.
 		</constant>
 	</constants>
 </class>

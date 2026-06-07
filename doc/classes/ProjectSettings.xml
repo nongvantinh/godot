@@ -2681,6 +2681,11 @@
 		<member name="physics/common/enable_object_picking" type="bool" setter="" getter="" default="true">
 			Enables [member Viewport.physics_object_picking] on the root viewport.
 		</member>
+		<member name="physics/common/manual_physics_stepping" type="bool" setter="" getter="" default="false">
+			If [code]true[/code], enables manual physics stepping via [method Engine.physics_iteration]. When enabled, each call to [method Engine.physics_iteration] drives exactly one physics tick instead of — or in addition to — the automatic fixed-timestep loop.
+			When [code]false[/code] (the default), this setting has no effect and the automatic physics loop runs exactly as before; calling [method Engine.physics_iteration] with this setting off emits an error and does nothing.
+			[b]Note:[/b] Enabling this setting in Phase 1 does [i]not[/i] disable the automatic physics loop. Manual ticks are additive. Full automatic-loop suppression is deferred to a later phase.
+		</member>
 		<member name="physics/common/max_physics_steps_per_frame" type="int" setter="" getter="" default="8">
 			Controls the maximum number of physics steps that can be simulated each rendered frame. The default value is tuned to avoid situations where the framerate suddenly drops to a very low value beyond a certain amount of physics simulation. This occurs because the physics engine can't keep up with the expected simulation rate. In this case, the framerate will start dropping, but the engine is only allowed to simulate a certain number of physics steps per rendered frame. This snowballs into a situation where framerate keeps dropping until it reaches a very low framerate (typically 1-2 FPS) and is called the [i]physics spiral of death[/i].
 			However, the game will appear to slow down if the rendering FPS is less than [code]1 / max_physics_steps_per_frame[/code] of [member physics/common/physics_ticks_per_second]. This occurs even if [code]delta[/code] is consistently used in physics calculations. To avoid this, increase [member physics/common/max_physics_steps_per_frame] if you have increased [member physics/common/physics_ticks_per_second] significantly above its default value.

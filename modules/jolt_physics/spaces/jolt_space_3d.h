@@ -35,12 +35,14 @@
 #include <Jolt/Jolt.h>
 
 #include <Jolt/Core/JobSystem.h>
+#include <Jolt/Core/JobSystemSingleThreaded.h>
 #include <Jolt/Core/TempAllocator.h>
 #include <Jolt/Physics/Body/BodyInterface.h>
 #include <Jolt/Physics/Collision/BroadPhase/BroadPhaseQuery.h>
 #include <Jolt/Physics/Collision/NarrowPhaseQuery.h>
 #include <Jolt/Physics/Constraints/Constraint.h>
 #include <Jolt/Physics/PhysicsSystem.h>
+#include <Jolt/Physics/StateRecorder.h>
 
 class JoltArea3D;
 class JoltBody3D;
@@ -65,10 +67,29 @@ class JoltSpace3D {
 	LocalVector<JPH::BodyID> pending_objects_sleeping;
 	LocalVector<JPH::BodyID> pending_objects_awake;
 
+	// Insertion-order-stable list of rigid bodies registered to this space.
+	// Maintained at the body attach/detach chokepoints (JoltBody3D::_add_to_space /
+	// _space_changing). Used ONLY by space_clone_state to assign a stable ordinal per
+	// body, mirroring GodotSpace3D::objects_ordered. Never iterated for stepping or
+	// queries. A _reset_space() (remove-then-add) re-appends the body to the tail,
+	// identical to GodotPhysics' remove_object+add_object behavior.
+	LocalVector<JoltBody3D *> bodies_ordered;
+
 	RID rid;
 
 	JPH::JobSystem *job_system = nullptr;
 	JPH::TempAllocator *temp_allocator = nullptr;
+
+	// per-space private job-system and temp-allocator for isolated spaces.
+	// Owned exclusively by this space; destroyed with it. Null for live (non-isolated) spaces.
+	JPH::JobSystemSingleThreaded *isolated_job_system = nullptr;
+	JPH::TempAllocatorMalloc *isolated_temp_allocator = nullptr;
+
+	// True when this space owns its own job-system/temp-allocator and may be stepped
+	// directly from a worker thread via JoltPhysicsServer3D::space_step_isolated().
+	// A space that has been passed to space_set_active(true) is NEVER isolated.
+	bool is_isolated = false;
+
 	JoltLayers *layers = nullptr;
 	JoltContactListener3D *contact_listener = nullptr;
 	JoltBodyActivationListener3D *body_activation_listener = nullptr;
@@ -97,6 +118,14 @@ public:
 
 	bool is_active() const { return active; }
 	void set_active(bool p_active) { active = p_active; }
+
+	// isolated-space thread-direct stepping support.
+	bool get_is_isolated() const { return is_isolated; }
+	// Promote this space to isolated mode: allocate per-space job-system and
+	// temp-allocator so the space can be stepped directly from a worker thread.
+	// Must only be called on a space that has never been added to active_spaces
+	// (i.e. never passed to space_set_active(true)).  No-op if already isolated.
+	void make_isolated();
 
 	bool is_stepping() const { return stepping; }
 
@@ -129,7 +158,16 @@ public:
 	JoltArea3D *get_default_area() const { return default_area; }
 	void set_default_area(JoltArea3D *p_area) { default_area = p_area; }
 
+	// Insertion-order tracking of rigid bodies for space_clone_state ordinal pairing.
+	void body_add_ordered(JoltBody3D *p_body);
+	void body_remove_ordered(JoltBody3D *p_body);
+	const LocalVector<JoltBody3D *> &get_bodies_ordered() const { return bodies_ordered; }
+
 	float get_last_step() const { return last_step; }
+
+	// Internal snapshot/restore primitive (Phase 0). Not exposed to GDScript or PhysicsServer3D.
+	void save_state(JPH::StateRecorder &p_recorder) const;
+	bool restore_state(JPH::StateRecorder &p_recorder);
 
 	JPH::Body *add_object(const JoltObject3D &p_object, const JPH::BodyCreationSettings &p_settings, bool p_sleeping = false);
 	JPH::Body *add_object(const JoltObject3D &p_object, const JPH::SoftBodyCreationSettings &p_settings, bool p_sleeping = false);
