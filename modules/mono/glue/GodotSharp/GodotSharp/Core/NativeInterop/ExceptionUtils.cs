@@ -108,10 +108,8 @@ namespace Godot.NativeInterop
                 {
                     SendToScriptDebugger(e);
                 }
-                else
-                {
-                    GD.PushError(e.ToString());
-                }
+
+                GD.PushError(e.ToString());
             }
             catch (Exception unexpected)
             {
