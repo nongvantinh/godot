@@ -42,6 +42,8 @@ class TypedArray;
 
 class Engine {
 public:
+	typedef bool (*ManualPhysicsIterationCallback)(double p_step, double p_time_scale, bool p_dry_run);
+
 	struct Singleton {
 		StringName name;
 		Object *ptr = nullptr;
@@ -107,6 +109,8 @@ private:
 	bool frame_server_synced = false;
 
 	bool freeze_time_scale = false;
+
+	ManualPhysicsIterationCallback _manual_physics_iteration_callback = nullptr;
 
 protected:
 	void _update_time_scale();
@@ -223,6 +227,9 @@ public:
 	void set_freeze_time_scale(bool p_frozen);
 	void set_embedded_in_editor(bool p_enabled);
 	bool is_embedded_in_editor() const;
+
+	void set_manual_physics_iteration_callback(ManualPhysicsIterationCallback p_callback);
+	ManualPhysicsIterationCallback get_manual_physics_iteration_callback() const;
 
 	Engine();
 	virtual ~Engine();

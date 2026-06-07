@@ -32,6 +32,7 @@
 
 #include "core/config/project_settings.h"
 #include "core/object/class_db.h"
+#include "core/os/thread.h"
 #include "core/variant/typed_array.h"
 
 void PhysicsServer3DRenderingServerHandler::set_vertex(int p_vertex_id, const Vector3 &p_vertex) {
@@ -722,6 +723,17 @@ void PhysicsServer3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("space_set_param", "space", "param", "value"), &PhysicsServer3D::space_set_param);
 	ClassDB::bind_method(D_METHOD("space_get_param", "space", "param"), &PhysicsServer3D::space_get_param);
 	ClassDB::bind_method(D_METHOD("space_get_direct_state", "space"), &PhysicsServer3D::space_get_direct_state);
+	ClassDB::bind_method(D_METHOD("space_step", "space", "delta"), &PhysicsServer3D::space_step);
+	ClassDB::bind_method(D_METHOD("space_flush_queries", "space"), &PhysicsServer3D::space_flush_queries);
+	ClassDB::bind_method(D_METHOD("space_step_safe", "space", "delta"), &PhysicsServer3D::space_step_safe);
+	ClassDB::bind_method(D_METHOD("space_step_batch", "spaces", "delta"), &PhysicsServer3D::space_step_batch);
+	ClassDB::bind_method(D_METHOD("space_save_state", "space"), &PhysicsServer3D::space_save_state);
+	ClassDB::bind_method(D_METHOD("space_restore_state", "space", "state"), &PhysicsServer3D::space_restore_state);
+	ClassDB::bind_method(D_METHOD("space_clone_state", "src_space", "dst_space"), &PhysicsServer3D::space_clone_state);
+	ClassDB::bind_method(D_METHOD("space_reset", "space"), &PhysicsServer3D::space_reset);
+	ClassDB::bind_method(D_METHOD("space_get_feature", "space", "feature"), &PhysicsServer3D::space_get_feature);
+	ClassDB::bind_method(D_METHOD("space_set_debug_contacts", "space", "max_contacts"), &PhysicsServer3D::space_set_debug_contacts);
+	ClassDB::bind_method(D_METHOD("space_get_contact_count", "space"), &PhysicsServer3D::space_get_contact_count);
 
 	ClassDB::bind_method(D_METHOD("area_create"), &PhysicsServer3D::area_create);
 	ClassDB::bind_method(D_METHOD("area_set_space", "area", "space"), &PhysicsServer3D::area_set_space);
@@ -1132,7 +1144,38 @@ void PhysicsServer3D::_bind_methods() {
 	BIND_ENUM_CONSTANT(BODY_AXIS_ANGULAR_Y);
 	BIND_ENUM_CONSTANT(BODY_AXIS_ANGULAR_Z);
 
+	BIND_ENUM_CONSTANT(FEATURE_STATE_SNAPSHOT);
+	BIND_ENUM_CONSTANT(FEATURE_STATE_CLONE);
+	BIND_ENUM_CONSTANT(FEATURE_MANUAL_STEP);
+
+	BIND_ENUM_CONSTANT(SPACE_FEATURE_NONE);
+	BIND_ENUM_CONSTANT(SPACE_FEATURE_PARTIAL);
+	BIND_ENUM_CONSTANT(SPACE_FEATURE_FULL);
+
 #endif
+}
+
+void PhysicsServer3D::space_step_safe(RID p_space, real_t p_delta) {
+	ERR_FAIL_COND_MSG(!Thread::is_main_thread(), "space_step_safe must be called from the main thread.");
+	sync();
+	space_flush_queries(p_space);
+	space_step(p_space, p_delta);
+	end_sync();
+}
+
+void PhysicsServer3D::space_step_batch(const TypedArray<RID> &p_spaces, real_t p_delta) {
+	ERR_FAIL_COND_MSG(!Thread::is_main_thread(), "space_step_batch must be called from the main thread.");
+	if (p_spaces.is_empty()) {
+		return; // empty array -> no-op, no handshake.
+	}
+	sync();
+	for (int i = 0; i < p_spaces.size(); i++) {
+		RID r = p_spaces[i];
+		ERR_CONTINUE(!r.is_valid());
+		space_flush_queries(r);
+		space_step(r, p_delta);
+	}
+	end_sync();
 }
 
 PhysicsServer3D::PhysicsServer3D() {

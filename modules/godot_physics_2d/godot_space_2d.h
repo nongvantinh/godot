@@ -88,6 +88,10 @@ private:
 	static void _broadphase_unpair(GodotCollisionObject2D *A, int p_subindex_A, GodotCollisionObject2D *B, int p_subindex_B, void *p_data, void *p_self);
 
 	HashSet<GodotCollisionObject2D *> objects;
+	// Insertion-order-stable list of registered objects, maintained in parallel
+	// with the HashSet. Used by space_clone_state to produce a deterministic
+	// ordinal index for each object.
+	LocalVector<GodotCollisionObject2D *> objects_ordered;
 
 	GodotArea2D *area = nullptr;
 
@@ -152,6 +156,7 @@ public:
 	void add_object(GodotCollisionObject2D *p_object);
 	void remove_object(GodotCollisionObject2D *p_object);
 	const HashSet<GodotCollisionObject2D *> &get_objects() const;
+	const LocalVector<GodotCollisionObject2D *> &get_objects_ordered() const { return objects_ordered; }
 
 	_FORCE_INLINE_ int get_solver_iterations() const { return solver_iterations; }
 	_FORCE_INLINE_ real_t get_contact_recycle_radius() const { return contact_recycle_radius; }
@@ -196,6 +201,7 @@ public:
 	}
 	_FORCE_INLINE_ Vector<Vector2> get_debug_contacts() { return contact_debug; }
 	_FORCE_INLINE_ int get_debug_contact_count() { return contact_debug_count; }
+	_FORCE_INLINE_ void reset_debug_contact_count() { contact_debug_count = 0; }
 
 	GodotPhysicsDirectSpaceState2D *get_direct_state();
 

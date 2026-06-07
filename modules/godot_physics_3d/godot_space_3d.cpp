@@ -1112,11 +1112,18 @@ GodotBroadPhase3D *GodotSpace3D::get_broadphase() {
 void GodotSpace3D::add_object(GodotCollisionObject3D *p_object) {
 	ERR_FAIL_COND(objects.has(p_object));
 	objects.insert(p_object);
+	objects_ordered.push_back(p_object);
 }
 
 void GodotSpace3D::remove_object(GodotCollisionObject3D *p_object) {
 	ERR_FAIL_COND(!objects.has(p_object));
 	objects.erase(p_object);
+	for (uint32_t i = 0; i < objects_ordered.size(); i++) {
+		if (objects_ordered[i] == p_object) {
+			objects_ordered.remove_at(i);
+			break;
+		}
+	}
 }
 
 const HashSet<GodotCollisionObject3D *> &GodotSpace3D::get_objects() const {
