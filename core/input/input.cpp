@@ -204,6 +204,7 @@ void Input::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_use_accumulated_input", "enable"), &Input::set_use_accumulated_input);
 	ClassDB::bind_method(D_METHOD("is_using_accumulated_input"), &Input::is_using_accumulated_input);
 	ClassDB::bind_method(D_METHOD("flush_buffered_events"), &Input::flush_buffered_events);
+	ClassDB::bind_method(D_METHOD("get_action_edge_fingerprint"), &Input::get_action_edge_fingerprint);
 	ClassDB::bind_method(D_METHOD("set_emulate_mouse_from_touch", "enable"), &Input::set_emulate_mouse_from_touch);
 	ClassDB::bind_method(D_METHOD("is_emulating_mouse_from_touch"), &Input::is_emulating_mouse_from_touch);
 	ClassDB::bind_method(D_METHOD("set_emulate_touch_from_mouse", "enable"), &Input::set_emulate_touch_from_mouse);
@@ -1645,6 +1646,15 @@ void Input::flush_buffered_events() {
 
 bool Input::is_agile_input_event_flushing() {
 	return agile_input_event_flushing;
+}
+
+uint64_t Input::get_action_edge_fingerprint() const {
+	uint64_t sum = 0;
+	for (const KeyValue<StringName, ActionState> &kv : action_states) {
+		sum += kv.value.pressed_physics_frame;
+		sum += kv.value.released_physics_frame;
+	}
+	return sum;
 }
 
 void Input::set_agile_input_event_flushing(bool p_enable) {

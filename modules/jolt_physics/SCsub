@@ -177,3 +177,27 @@ env.modules_sources += module_obj
 
 # Needed to force rebuilding the module files when the thirdparty library is updated.
 env.Depends(module_obj, thirdparty_obj)
+
+# Expose Jolt includes to the global env so that test headers (compiled as part of
+# tests/test_main.cpp via modules/modules_tests.gen.h) can include Jolt headers.
+#
+# Those test headers are compiled in the global env, NOT env_jolt, so they must see the
+# same Jolt-ABI- and SIMD-affecting flags the Jolt library was built with above. Otherwise
+# the JPH:: struct layouts and intrinsics mismatch between the test TU and the library it
+# links against:
+#   - JPH_DOUBLE_PRECISION changes RVec3/RMat44/Body layout (ABI); reading body state at the
+#     wrong offsets corrupts the stack (surfaces as an ASan stack-buffer-overflow).
+#   - -msse4.2 on web provides the __m128 intrinsics Jolt's Vec4 needs; without it the test
+#     TU fails to compile ("unknown type name '__m128'").
+#   - JPH_ENABLE_ASSERTS / JPH_DEBUG_RENDERER also alter Jolt class layout.
+# Mirror env_jolt's conditionals exactly so the test TU stays ABI-identical to the library.
+if env["tests"]:
+    env.Prepend(CPPPATH=[thirdparty_dir])
+    if env["platform"] == "web" and env["wasm_simd"]:
+        env.Append(CCFLAGS=["-msse4.2"])
+    if env.dev_build:
+        env.Append(CPPDEFINES=["JPH_ENABLE_ASSERTS"])
+    if env.editor_build:
+        env.Append(CPPDEFINES=["JPH_DEBUG_RENDERER"])
+    if env["precision"] == "double":
+        env.Append(CPPDEFINES=["JPH_DOUBLE_PRECISION"])

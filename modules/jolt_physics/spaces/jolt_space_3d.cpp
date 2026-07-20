@@ -185,6 +185,31 @@ JoltSpace3D::~JoltSpace3D() {
 		delete layers;
 		layers = nullptr;
 	}
+
+	if (isolated_temp_allocator != nullptr) {
+		delete isolated_temp_allocator;
+		isolated_temp_allocator = nullptr;
+	}
+	if (isolated_job_system != nullptr) {
+		delete isolated_job_system;
+		isolated_job_system = nullptr;
+	}
+}
+
+void JoltSpace3D::make_isolated() {
+	if (is_isolated) {
+		return;
+	}
+	// Create per-space JobSystemSingleThreaded (avoids JoltJobSystem::Job::completed_head
+	// inline static std::atomic, which is process-global and races under concurrent Update).
+	isolated_job_system = new JPH::JobSystemSingleThreaded();
+	isolated_job_system->Init(JPH::cMaxPhysicsJobs);
+	// Use malloc-backed allocator (avoids JoltTempAllocator unsynchronized bump state).
+	isolated_temp_allocator = new JPH::TempAllocatorMalloc();
+	// Swap the pointers used by step().
+	job_system = isolated_job_system;
+	temp_allocator = isolated_temp_allocator;
+	is_isolated = true;
 }
 
 void JoltSpace3D::step(float p_step) {
@@ -219,6 +244,14 @@ void JoltSpace3D::step(float p_step) {
 	_post_step(p_step);
 
 	stepping = false;
+}
+
+void JoltSpace3D::save_state(JPH::StateRecorder &p_recorder) const {
+	physics_system->SaveState(p_recorder, JPH::EStateRecorderState::All, nullptr);
+}
+
+bool JoltSpace3D::restore_state(JPH::StateRecorder &p_recorder) {
+	return physics_system->RestoreState(p_recorder, nullptr);
 }
 
 void JoltSpace3D::call_queries() {
@@ -382,6 +415,19 @@ JoltPhysicsDirectSpaceState3D *JoltSpace3D::get_direct_state() {
 	}
 
 	return direct_state;
+}
+
+void JoltSpace3D::body_add_ordered(JoltBody3D *p_body) {
+	bodies_ordered.push_back(p_body);
+}
+
+void JoltSpace3D::body_remove_ordered(JoltBody3D *p_body) {
+	for (uint32_t i = 0; i < bodies_ordered.size(); i++) {
+		if (bodies_ordered[i] == p_body) {
+			bodies_ordered.remove_at(i);
+			break;
+		}
+	}
 }
 
 JPH::Body *JoltSpace3D::add_object(const JoltObject3D &p_object, const JPH::BodyCreationSettings &p_settings, bool p_sleeping) {
