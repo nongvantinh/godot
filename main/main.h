@@ -77,6 +77,8 @@ public:
 	static void test_cleanup();
 	static int start();
 
+	static bool physics_iteration_step(double p_physics_step, double p_time_scale, bool p_dry_run = false);
+
 	static bool iteration();
 	static void force_redraw();
 

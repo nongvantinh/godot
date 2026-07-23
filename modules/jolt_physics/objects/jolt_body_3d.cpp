@@ -128,6 +128,9 @@ void JoltBody3D::_add_to_space() {
 
 	delete jolt_settings;
 	jolt_settings = nullptr;
+
+	// Track insertion order for space_clone_state ordinal pairing (bodies only).
+	space->body_add_ordered(this);
 }
 
 void JoltBody3D::_enqueue_call_queries() {
@@ -441,6 +444,12 @@ void JoltBody3D::_space_changing() {
 
 	sleep_initially = is_sleeping();
 
+	// Deregister from the insertion-order list while the old space is still set
+	// (mirrors the body_add_ordered in _add_to_space). No-op if not attached.
+	if (in_space()) {
+		space->body_remove_ordered(this);
+	}
+
 	_destroy_joint_constraints();
 	_clear_areas();
 	_dequeue_call_queries();
@@ -533,7 +542,19 @@ void JoltBody3D::set_transform(Transform3D p_transform) {
 		jolt_settings->mPosition = to_jolt_r(p_transform.origin);
 		jolt_settings->mRotation = to_jolt(p_transform.basis);
 	} else if (is_kinematic()) {
-		kinematic_transform = p_transform;
+		// A kinematic body is moved during `pre_step()` by `_move_kinematic()`, but `pre_step()` only runs
+		// for bodies Jolt considers ACTIVE. A kinematic body that has come to rest deactivates (sleeps), and
+		// setting a new target transform here does not by itself re-activate it. Under manual space stepping
+		// (where the game drives motion purely by setting transforms, e.g. CharacterBody3D.move_and_slide,
+		// with no engine-driven velocity to keep the body awake) the body would otherwise freeze at its last
+		// position while its node moves on — desyncing it and making it invisible to Area3D sensors (no
+		// body_entered / empty get_overlapping_bodies) and to shape queries. Wake it whenever its target
+		// actually changes so `_move_kinematic()` runs next step and the body tracks the node. Mirrors
+		// set_linear_velocity, which wakes the body via _motion_changed().
+		if (!kinematic_transform.is_equal_approx(p_transform)) {
+			kinematic_transform = p_transform;
+			wake_up();
+		}
 	} else {
 		space->get_body_iface().SetPositionAndRotation(jolt_body->GetID(), to_jolt_r(p_transform.origin), to_jolt(p_transform.basis), JPH::EActivation::DontActivate);
 	}

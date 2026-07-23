@@ -86,6 +86,10 @@ private:
 	static void _broadphase_unpair(GodotCollisionObject3D *A, int p_subindex_A, GodotCollisionObject3D *B, int p_subindex_B, void *p_data, void *p_self);
 
 	HashSet<GodotCollisionObject3D *> objects;
+	// Insertion-order-stable list of registered objects, maintained in parallel
+	// with the HashSet. Used by space_clone_state to produce a deterministic
+	// ordinal index for each object. Never iterate objects directly for clone ops.
+	LocalVector<GodotCollisionObject3D *> objects_ordered;
 
 	GodotArea3D *area = nullptr;
 
@@ -108,6 +112,8 @@ private:
 	real_t body_time_to_sleep = 0.0;
 
 	bool locked = false;
+
+	PS3DE::SpaceSteppingMode stepping_mode = PS3DE::SPACE_STEPPING_MODE_AUTO;
 
 	real_t last_step = 0.001;
 
@@ -155,6 +161,7 @@ public:
 	void add_object(GodotCollisionObject3D *p_object);
 	void remove_object(GodotCollisionObject3D *p_object);
 	const HashSet<GodotCollisionObject3D *> &get_objects() const;
+	const LocalVector<GodotCollisionObject3D *> &get_objects_ordered() const { return objects_ordered; }
 
 	_FORCE_INLINE_ int get_solver_iterations() const { return solver_iterations; }
 	_FORCE_INLINE_ real_t get_contact_recycle_radius() const { return contact_recycle_radius; }
@@ -183,6 +190,9 @@ public:
 	int get_island_count() const { return island_count; }
 
 	void set_active_objects(int p_active_objects) { active_objects = p_active_objects; }
+
+	void set_stepping_mode(PS3DE::SpaceSteppingMode p_mode) { stepping_mode = p_mode; }
+	PS3DE::SpaceSteppingMode get_stepping_mode() const { return stepping_mode; }
 	int get_active_objects() const { return active_objects; }
 
 	int get_collision_pairs() const { return collision_pairs; }
@@ -198,6 +208,7 @@ public:
 	}
 	_FORCE_INLINE_ Vector<Vector3> get_debug_contacts() { return contact_debug; }
 	_FORCE_INLINE_ int get_debug_contact_count() { return contact_debug_count; }
+	_FORCE_INLINE_ void reset_debug_contact_count() { contact_debug_count = 0; }
 
 	void set_static_global_body(RID p_body) { static_global_body = p_body; }
 	RID get_static_global_body() { return static_global_body; }

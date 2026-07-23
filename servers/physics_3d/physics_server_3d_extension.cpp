@@ -439,6 +439,17 @@ void PhysicsServer3DExtension::_bind_methods() {
 	GDVIRTUAL_BIND(_end_sync);
 	GDVIRTUAL_BIND(_finish);
 
+	GDVIRTUAL_BIND(_space_step, "space", "delta");
+	GDVIRTUAL_BIND(_space_flush_queries, "space");
+	GDVIRTUAL_BIND(_space_save_state, "space");
+	GDVIRTUAL_BIND(_space_restore_state, "space", "state");
+	GDVIRTUAL_BIND(_space_clone_state, "src_space", "dst_space");
+	GDVIRTUAL_BIND(_space_reset, "space");
+	GDVIRTUAL_BIND(_space_get_feature, "space", "feature");
+	GDVIRTUAL_BIND(_space_set_stepping_mode, "space", "mode");
+	GDVIRTUAL_BIND(_space_get_stepping_mode, "space");
+	GDVIRTUAL_BIND(_space_is_valid, "space");
+
 	GDVIRTUAL_BIND(_is_flushing_queries);
 	GDVIRTUAL_BIND(_get_process_info, "process_info");
 }

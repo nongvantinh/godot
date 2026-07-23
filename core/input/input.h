@@ -495,6 +495,9 @@ public:
 #endif
 	void flush_buffered_events();
 	bool is_agile_input_event_flushing();
+
+	uint64_t get_action_edge_fingerprint() const;
+
 	void set_agile_input_event_flushing(bool p_enable);
 	void set_use_accumulated_input(bool p_enable);
 	bool is_using_accumulated_input();

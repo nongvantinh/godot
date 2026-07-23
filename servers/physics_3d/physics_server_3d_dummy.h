@@ -30,6 +30,7 @@
 
 #pragma once
 
+#include "core/variant/typed_array.h"
 #include "servers/physics_3d/physics_server_3d.h"
 
 class PhysicsDirectBodyState3DDummy : public PhysicsDirectBodyState3D {
@@ -162,6 +163,8 @@ public:
 	virtual RID space_create() override { return RID(); }
 	virtual void space_set_active(RID p_space, bool p_active) override {}
 	virtual bool space_is_active(RID p_space) const override { return false; }
+	virtual void space_set_stepping_mode(RID p_space, PS3DE::SpaceSteppingMode p_mode) override {}
+	virtual PS3DE::SpaceSteppingMode space_get_stepping_mode(RID p_space) const override { return PS3DE::SPACE_STEPPING_MODE_AUTO; }
 
 	virtual void space_set_param(RID p_space, PS3DE::SpaceParameter p_param, real_t p_value) override {}
 	virtual real_t space_get_param(RID p_space, PS3DE::SpaceParameter p_param) const override { return 0; }
@@ -439,6 +442,25 @@ public:
 	virtual void sync() override {}
 	virtual void flush_queries() override {}
 	virtual void end_sync() override {}
+
+	virtual void space_step(RID p_space, real_t p_delta) override {}
+	virtual void space_flush_queries(RID p_space) override {}
+	virtual void space_step_batch(const TypedArray<RID> &p_spaces, real_t p_delta) override {}
+	virtual PackedByteArray space_save_state(RID p_space) override {
+		WARN_PRINT("space_save_state: this physics backend does not support state snapshots (PS3DE::FEATURE_STATE_SNAPSHOT is NONE); returning empty state.");
+		return PackedByteArray();
+	}
+	virtual bool space_restore_state(RID p_space, const PackedByteArray &p_state) override {
+		WARN_PRINT("space_restore_state: this physics backend does not support state snapshots (PS3DE::FEATURE_STATE_SNAPSHOT is NONE); ignoring.");
+		return false;
+	}
+	virtual bool space_clone_state(RID p_src_space, RID p_dst_space) override {
+		WARN_PRINT("space_clone_state: this physics backend does not support state cloning (PS3DE::FEATURE_STATE_CLONE is NONE); ignoring.");
+		return false;
+	}
+	virtual void space_reset(RID p_space) override {}
+	virtual int space_get_feature(RID p_space, PS3DE::SpaceFeature p_feature) const override { return PS3DE::SPACE_FEATURE_NONE; }
+	virtual bool space_is_valid(RID p_space) const override { return false; }
 	virtual void finish() override {
 		memdelete(body_state_dummy);
 		memdelete(space_state_dummy);

@@ -238,6 +238,9 @@ public:
 	EXBIND2(space_set_active, RID, bool)
 	EXBIND1RC(bool, space_is_active, RID)
 
+	EXBIND2(space_set_stepping_mode, RID, PS3DE::SpaceSteppingMode)
+	EXBIND1RC(PS3DE::SpaceSteppingMode, space_get_stepping_mode, RID)
+
 	EXBIND3(space_set_param, RID, PS3DE::SpaceParameter, real_t)
 	EXBIND2RC(real_t, space_get_param, RID, PS3DE::SpaceParameter)
 
@@ -548,6 +551,15 @@ public:
 	EXBIND0(flush_queries)
 	EXBIND0(end_sync)
 	EXBIND0(finish)
+
+	EXBIND2(space_step, RID, real_t)
+	EXBIND1(space_flush_queries, RID)
+	EXBIND1R(PackedByteArray, space_save_state, RID)
+	EXBIND2R(bool, space_restore_state, RID, const PackedByteArray &)
+	EXBIND2R(bool, space_clone_state, RID, RID)
+	EXBIND1(space_reset, RID)
+	EXBIND2RC(int, space_get_feature, RID, PS3DE::SpaceFeature)
+	EXBIND1RC(bool, space_is_valid, RID)
 
 	EXBIND0RC(bool, is_flushing_queries)
 	EXBIND1R(int, get_process_info, PS3DE::ProcessInfo)
