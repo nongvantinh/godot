@@ -877,6 +877,72 @@ TEST_SUITE("[PhysicsServer3D][SpaceStep]") {
 		}
 	}
 
+	// Regression (GH #21): under manual stepping, a kinematic body moved purely by setting its transform
+	// (the CharacterBody3D.move_and_slide pattern — no engine-driven velocity) must remain detectable at
+	// its new position after it has come to rest. Before the fix, a slept kinematic body kept its old
+	// broadphase position while its node moved on (set_transform updated kinematic_transform but did not
+	// wake the body, and _pre_step only runs _move_kinematic for ACTIVE bodies), so it became invisible to
+	// point/shape queries and Area3D sensors. This reproduces the loss of Area3D detection with a server-
+	// level point query (the same broadphase the area monitor uses), without scene-level Area3D plumbing.
+	TEST_CASE("[SceneTree][PhysicsServer3D] manual-step: a slept kinematic body moved by transform stays detectable (Jolt Area3D regression)") {
+		if (is_dummy_server()) {
+			MESSAGE("Skipping: dummy physics server has no simulation.");
+			return;
+		}
+
+		PhysicsServer3D *ps = PhysicsServer3D::get_singleton();
+		REQUIRE(ps != nullptr);
+
+		RID space = ps->space_create();
+		ps->space_set_active(space, true);
+		ps->space_set_stepping_mode(space, PS3DE::SPACE_STEPPING_MODE_MANUAL);
+
+		RID box = ps->box_shape_create();
+		ps->shape_set_data(box, Vector3(0.5, 0.5, 0.5)); // 1 m cube (half-extents)
+
+		RID body = ps->body_create();
+		ps->body_set_space(body, space);
+		ps->body_add_shape(body, box);
+		ps->body_set_mode(body, PS3DE::BODY_MODE_KINEMATIC);
+		ps->body_set_state(body, PS3DE::BODY_STATE_TRANSFORM, Transform3D(Basis(), Vector3(0, 0, 0)));
+
+		const real_t dt = 1.0f / 60.0f;
+
+		// Let the stationary kinematic body come to rest (sleep) under manual stepping.
+		for (int i = 0; i < 120; i++) {
+			ps->space_step_safe(space, dt);
+		}
+
+		// Move it far away purely by setting its transform, then step once.
+		const Vector3 moved(50, 0, 0);
+		ps->body_set_state(body, PS3DE::BODY_STATE_TRANSFORM, Transform3D(Basis(), moved));
+		ps->space_step_safe(space, dt);
+
+		// A point query at the NEW position must find the body: its broadphase proxy tracked the transform.
+		PhysicsDirectSpaceState3D *ss = ps->space_get_direct_state(space);
+		REQUIRE(ss != nullptr);
+
+		PS3DT::PointParameters params;
+		params.position = moved;
+		PS3DT::ShapeResult results[8];
+		int hits = ss->intersect_point(params, results, 8);
+
+		bool found = false;
+		for (int i = 0; i < hits; i++) {
+			if (results[i].rid == body) {
+				found = true;
+				break;
+			}
+		}
+		CHECK_MESSAGE(found,
+				"A kinematic body moved by transform under manual stepping must be detectable at its new "
+				"position (broadphase proxy must track the transform, else Area3D sensors miss it).");
+
+		ps->free_rid(body);
+		ps->free_rid(box);
+		ps->free_rid(space);
+	}
+
 } // TEST_SUITE
 
 } // namespace TestPhysicsServer3DSpaceStep
