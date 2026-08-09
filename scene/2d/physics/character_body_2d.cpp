@@ -42,9 +42,7 @@
 // So, if you pass 45 as limit, avoid numerical precision errors when angle is 45.
 #define FLOOR_ANGLE_THRESHOLD 0.01
 
-bool CharacterBody2D::move_and_slide() {
-	// Hack in order to work with calling from _process as well as from _physics_process; calling from thread is risky.
-	double delta = Engine::get_singleton()->is_in_physics_frame() ? get_physics_process_delta_time() : get_process_delta_time();
+bool CharacterBody2D::move_and_slide(double p_delta) {
 
 	Vector2 current_platform_velocity = platform_velocity;
 	Transform2D gt = get_global_transform();
@@ -82,7 +80,7 @@ bool CharacterBody2D::move_and_slide() {
 	on_wall = false;
 
 	if (!current_platform_velocity.is_zero_approx()) {
-		PS2DT::MotionParameters parameters(get_global_transform(), current_platform_velocity * delta, margin);
+		PS2DT::MotionParameters parameters(get_global_transform(), current_platform_velocity * p_delta, margin);
 		parameters.recovery_as_collision = true; // Also report collisions generated only from recovery.
 		parameters.exclude_bodies.insert(platform_rid);
 		if (platform_object_id.is_valid()) {
@@ -97,13 +95,13 @@ bool CharacterBody2D::move_and_slide() {
 	}
 
 	if (motion_mode == MOTION_MODE_GROUNDED) {
-		_move_and_slide_grounded(delta, was_on_floor);
+		_move_and_slide_grounded(p_delta, was_on_floor);
 	} else {
-		_move_and_slide_floating(delta);
+		_move_and_slide_floating(p_delta);
 	}
 
 	// Compute real velocity.
-	real_velocity = get_position_delta() / delta;
+	real_velocity = get_position_delta() / p_delta;
 
 	if (platform_on_leave != PLATFORM_ON_LEAVE_DO_NOTHING) {
 		// Add last platform velocity when just left a moving platform.
@@ -685,7 +683,7 @@ void CharacterBody2D::_validate_property(PropertyInfo &p_property) const {
 }
 
 void CharacterBody2D::_bind_methods() {
-	ClassDB::bind_method(D_METHOD("move_and_slide"), &CharacterBody2D::move_and_slide);
+	ClassDB::bind_method(D_METHOD("move_and_slide", "delta"), &CharacterBody2D::move_and_slide);
 	ClassDB::bind_method(D_METHOD("apply_floor_snap"), &CharacterBody2D::apply_floor_snap);
 
 	ClassDB::bind_method(D_METHOD("set_velocity", "velocity"), &CharacterBody2D::set_velocity);

@@ -40,9 +40,13 @@
 //so, if you pass 45 as limit, avoid numerical precision errors when angle is 45.
 #define FLOOR_ANGLE_THRESHOLD 0.01
 
-bool CharacterBody3D::move_and_slide() {
-	// Hack in order to work with calling from _process as well as from _physics_process; calling from thread is risky
-	double delta = Engine::get_singleton()->is_in_physics_frame() ? get_physics_process_delta_time() : get_process_delta_time();
+bool CharacterBody3D::move_and_slide(double p_delta) {
+	// Timestep ownership (Aether fork — Docs/adr/simulation-timestep-ownership.md): the caller advancing the
+	// simulation supplies the delta explicitly. CharacterBody derives time from NOTHING global: not the
+	// Engine::time_scale-scaled process delta, not "am I in a physics frame?", not the space's last_step. There
+	// is exactly one clock in the gameplay pipeline and the caller owns it, so a manually-stepped simulation and
+	// the bodies it advances can never sit on two timelines. CharacterBody3D::move_and_slide is now a pure
+	// function of (previous state, velocity, delta).
 
 	for (int i = 0; i < 3; i++) {
 		if (locked_axis & (1 << i)) {
@@ -98,7 +102,7 @@ bool CharacterBody3D::move_and_slide() {
 	last_motion = Vector3();
 
 	if (!current_platform_velocity.is_zero_approx()) {
-		PS3DT::MotionParameters parameters(get_global_transform(), current_platform_velocity * delta, margin);
+		PS3DT::MotionParameters parameters(get_global_transform(), current_platform_velocity * p_delta, margin);
 		parameters.recovery_as_collision = true; // Also report collisions generated only from recovery.
 
 		parameters.exclude_bodies.insert(platform_rid);
@@ -116,13 +120,13 @@ bool CharacterBody3D::move_and_slide() {
 	}
 
 	if (motion_mode == MOTION_MODE_GROUNDED) {
-		_move_and_slide_grounded(delta, was_on_floor);
+		_move_and_slide_grounded(p_delta, was_on_floor);
 	} else {
-		_move_and_slide_floating(delta);
+		_move_and_slide_floating(p_delta);
 	}
 
 	// Compute real velocity.
-	real_velocity = get_position_delta() / delta;
+	real_velocity = get_position_delta() / p_delta;
 
 	if (platform_on_leave != PLATFORM_ON_LEAVE_DO_NOTHING) {
 		// Add last platform velocity when just left a moving platform.
@@ -867,7 +871,7 @@ void CharacterBody3D::_notification(int p_what) {
 }
 
 void CharacterBody3D::_bind_methods() {
-	ClassDB::bind_method(D_METHOD("move_and_slide"), &CharacterBody3D::move_and_slide);
+	ClassDB::bind_method(D_METHOD("move_and_slide", "delta"), &CharacterBody3D::move_and_slide);
 	ClassDB::bind_method(D_METHOD("apply_floor_snap"), &CharacterBody3D::apply_floor_snap);
 
 	ClassDB::bind_method(D_METHOD("set_velocity", "velocity"), &CharacterBody3D::set_velocity);
