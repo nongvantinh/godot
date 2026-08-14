@@ -174,17 +174,46 @@ void JoltBody3D::_move_kinematic(float p_step) {
 	jolt_body->SetLinearVelocity(JPH::Vec3::sZero());
 	jolt_body->SetAngularVelocity(JPH::Vec3::sZero());
 
-	const JPH::RVec3 current_position = jolt_body->GetPosition();
-	const JPH::Quat current_rotation = jolt_body->GetRotation();
+	const Vector3 current_origin = to_godot(jolt_body->GetPosition());
+	const Basis current_basis = to_godot(jolt_body->GetRotation());
+
+	// Compare in Godot float space, not exact Jolt RVec3 equality. Marginal float deltas must not
+	// skip MoveKinematic on one multi-step frame schedule and run it on another.
+	const bool skip_move = kinematic_transform.origin.is_equal_approx(current_origin)
+			&& kinematic_transform.basis.is_equal_approx(current_basis);
+	if (skip_move) {
+		return;
+	}
+
+	jolt_body->MoveKinematic(to_jolt_r(kinematic_transform.origin), to_jolt(kinematic_transform.basis), p_step);
+}
+
+void JoltBody3D::commit_kinematic_transform_to_jolt() {
+	if (!in_space() || !is_kinematic()) {
+		return;
+	}
 
 	const JPH::RVec3 new_position = to_jolt_r(kinematic_transform.origin);
 	const JPH::Quat new_rotation = to_jolt(kinematic_transform.basis);
 
-	if (new_position == current_position && new_rotation == current_rotation) {
+	if (space->get_stepping_mode() == PS3DE::SPACE_STEPPING_MODE_MANUAL) {
+		const float step = space->get_last_step() > 0.0f ? space->get_last_step() : (1.0f / 60.0f);
+		jolt_body->MoveKinematic(new_position, new_rotation, step);
+	} else {
+		space->get_body_iface().SetPositionAndRotation(jolt_body->GetID(), new_position, new_rotation, JPH::EActivation::DontActivate);
+	}
+}
+
+void JoltBody3D::advance_kinematic_manual_step(float p_step) {
+	if (!in_space() || !is_kinematic()) {
 		return;
 	}
 
-	jolt_body->MoveKinematic(new_position, new_rotation, p_step);
+	if (_needs_update_environmental_properties()) {
+		_update_environmental_properties();
+	}
+
+	_move_kinematic(p_step);
 }
 
 JPH::EAllowedDOFs JoltBody3D::_calculate_allowed_dofs() const {
@@ -1140,6 +1169,11 @@ void JoltBody3D::pre_step(float p_step) {
 		} break;
 
 		case PS3DE::BODY_MODE_KINEMATIC: {
+			// MANUAL spaces: kinematic motion runs once in space _pre_step via advance_kinematic_manual_step.
+			if (space != nullptr && space->get_stepping_mode() == PS3DE::SPACE_STEPPING_MODE_MANUAL) {
+				break;
+			}
+
 			if (_needs_update_environmental_properties()) {
 				_update_environmental_properties();
 			}

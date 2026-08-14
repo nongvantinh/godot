@@ -157,6 +157,14 @@ public:
 	JoltBody3D();
 	virtual ~JoltBody3D() override;
 
+	void commit_kinematic_transform_to_jolt();
+
+	// Manual gameplay spaces sweep every registered kinematic from bodies_ordered, not only
+	// Jolt-active bodies, so a sleeping kinematic still reaches the sensor broadphase before Update().
+	void advance_kinematic_manual_step(float p_step);
+
+	Transform3D get_kinematic_transform() const { return kinematic_transform; }
+
 	void set_transform(Transform3D p_transform);
 
 	Variant get_state(PS3DE::BodyState p_state) const;

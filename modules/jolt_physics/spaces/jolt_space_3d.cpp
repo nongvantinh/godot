@@ -29,6 +29,7 @@
 /**************************************************************************/
 
 #include "jolt_space_3d.h"
+#include "core/os/os.h"
 
 #include "../joints/jolt_joint_3d.h"
 #include "../jolt_physics_server_3d.h"
@@ -46,6 +47,7 @@
 #include "core/os/time.h"
 #include "core/string/print_string.h"
 #include "core/variant/variant_utility.h"
+#include "scene/main/scene_tree.h"
 
 #include <Jolt/Physics/Collision/CollideShapeVsShapePerLeaf.h>
 #include <Jolt/Physics/Collision/CollisionCollectorImpl.h>
@@ -74,6 +76,20 @@ void JoltSpace3D::_pre_step(float p_step) {
 
 	contact_listener->pre_step();
 
+	if (stepping_mode == PS3DE::SPACE_STEPPING_MODE_MANUAL) {
+		for (JoltBody3D *body : bodies_ordered) {
+			if (body != nullptr) {
+				body->advance_kinematic_manual_step(p_step);
+			}
+		}
+		for (JoltArea3D *area : areas_ordered) {
+			if (area != nullptr) {
+				area->advance_kinematic_manual_step(p_step);
+			}
+		}
+		physics_system->OptimizeBroadPhase();
+	}
+
 	const JPH::BodyLockInterface &lock_iface = get_lock_iface();
 	const JPH::BodyID *active_rigid_bodies = physics_system->GetActiveBodiesUnsafe(JPH::EBodyType::RigidBody);
 	const JPH::uint32 active_rigid_body_count = physics_system->GetNumActiveBodies(JPH::EBodyType::RigidBody);
@@ -101,6 +117,13 @@ void JoltSpace3D::_post_step(float p_step) {
 	physics_system->SetBodyActivationListener(nullptr);
 
 	contact_listener->post_step();
+
+	// MANUAL spaces that flush queries at tick start (before this step) need area monitor delivery
+	// here: overlaps detected during Update would otherwise wait until the next tick-start flush.
+	// Pose synchronization is handled in _pre_step; this is callback delivery only.
+	if (stepping_mode == PS3DE::SPACE_STEPPING_MODE_MANUAL) {
+		call_area_queries();
+	}
 
 	while (shapes_changed_list.first()) {
 		JoltShapedObject3D *object = shapes_changed_list.first()->self();
@@ -212,9 +235,32 @@ void JoltSpace3D::make_isolated() {
 	is_isolated = true;
 }
 
+void JoltSpace3D::set_stepping_mode(PS3DE::SpaceSteppingMode p_mode) {
+	stepping_mode = p_mode;
+
+	JPH::PhysicsSettings settings = physics_system->GetPhysicsSettings();
+	if (p_mode == PS3DE::SPACE_STEPPING_MODE_MANUAL) {
+		settings.mUseBodyPairContactCache = false;
+		settings.mAllowSleeping = false;
+	} else {
+		settings.mUseBodyPairContactCache = JoltProjectSettings::body_pair_contact_cache_enabled;
+		settings.mAllowSleeping = JoltProjectSettings::sleep_allowed;
+	}
+	physics_system->SetPhysicsSettings(settings);
+}
+
 void JoltSpace3D::step(float p_step) {
 	stepping = true;
 	last_step = p_step;
+
+	if (stepping_mode == PS3DE::SPACE_STEPPING_MODE_MANUAL) {
+		// MANUAL spaces may run many SpaceStep calls per engine frame. Transform notifications are
+		// normally flushed at frame boundaries; without a per-step flush, kinematic targets updated
+		// after the previous step keep stale Jolt poses for subsequent steps in the same frame.
+		if (SceneTree *tree = Object::cast_to<SceneTree>(OS::get_singleton()->get_main_loop())) {
+			tree->flush_transform_notifications();
+		}
+	}
 
 	_pre_step(p_step);
 
@@ -261,10 +307,14 @@ void JoltSpace3D::call_queries() {
 		body->call_queries();
 	}
 
+	call_area_queries();
+}
+
+void JoltSpace3D::call_area_queries() {
 	while (area_call_queries_list.first()) {
-		JoltArea3D *body = area_call_queries_list.first()->self();
+		JoltArea3D *area = area_call_queries_list.first()->self();
 		area_call_queries_list.remove(area_call_queries_list.first());
-		body->call_queries();
+		area->call_queries();
 	}
 }
 
@@ -430,6 +480,19 @@ void JoltSpace3D::body_remove_ordered(JoltBody3D *p_body) {
 	}
 }
 
+void JoltSpace3D::area_add_ordered(JoltArea3D *p_area) {
+	areas_ordered.push_back(p_area);
+}
+
+void JoltSpace3D::area_remove_ordered(JoltArea3D *p_area) {
+	for (uint32_t i = 0; i < areas_ordered.size(); i++) {
+		if (areas_ordered[i] == p_area) {
+			areas_ordered.remove_at(i);
+			break;
+		}
+	}
+}
+
 JPH::Body *JoltSpace3D::add_object(const JoltObject3D &p_object, const JPH::BodyCreationSettings &p_settings, bool p_sleeping) {
 	JPH::BodyInterface &body_iface = get_body_iface();
 	JPH::Body *jolt_body = body_iface.CreateBody(p_settings);
@@ -508,6 +571,33 @@ void JoltSpace3D::flush_pending_objects() {
 		JPH::BodyInterface::AddState add_state = body_iface.AddBodiesPrepare(pending_objects_awake.ptr(), pending_objects_awake.size());
 		body_iface.AddBodiesFinalize(pending_objects_awake.ptr(), pending_objects_awake.size(), add_state, JPH::EActivation::Activate);
 		pending_objects_awake.reset();
+	}
+}
+
+void JoltSpace3D::commit_kinematic_transforms() {
+	if (stepping_mode == PS3DE::SPACE_STEPPING_MODE_MANUAL) {
+		for (JoltBody3D *body : bodies_ordered) {
+			if (body != nullptr && body->is_kinematic() && body->in_space()) {
+				body->commit_kinematic_transform_to_jolt();
+			}
+		}
+		return;
+	}
+
+	const JPH::BodyLockInterface &lock_iface = get_lock_iface();
+	const JPH::BodyID *active_bodies = physics_system->GetActiveBodiesUnsafe(JPH::EBodyType::RigidBody);
+	const JPH::uint32 active_body_count = physics_system->GetNumActiveBodies(JPH::EBodyType::RigidBody);
+
+	for (JPH::uint32 i = 0; i < active_body_count; ++i) {
+		JPH::Body *jolt_body = lock_iface.TryGetBody(active_bodies[i]);
+		if (unlikely(jolt_body == nullptr)) {
+			continue;
+		}
+
+		JoltBody3D *body = reinterpret_cast<JoltBody3D *>(jolt_body->GetUserData());
+		ERR_CONTINUE(body == nullptr);
+
+		body->commit_kinematic_transform_to_jolt();
 	}
 }
 

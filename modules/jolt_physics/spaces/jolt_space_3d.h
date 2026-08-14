@@ -79,6 +79,7 @@ class JoltSpace3D {
 	// queries. A _reset_space() (remove-then-add) re-appends the body to the tail,
 	// identical to GodotPhysics' remove_object+add_object behavior.
 	LocalVector<JoltBody3D *> bodies_ordered;
+	LocalVector<JoltArea3D *> areas_ordered;
 
 	RID rid;
 
@@ -122,6 +123,8 @@ public:
 
 	void call_queries();
 
+	void call_area_queries();
+
 	RID get_rid() const { return rid; }
 	void set_rid(const RID &p_rid) { rid = p_rid; }
 
@@ -129,7 +132,7 @@ public:
 	void set_active(bool p_active) { active = p_active; }
 
 	PS3DE::SpaceSteppingMode get_stepping_mode() const { return stepping_mode; }
-	void set_stepping_mode(PS3DE::SpaceSteppingMode p_mode) { stepping_mode = p_mode; }
+	void set_stepping_mode(PS3DE::SpaceSteppingMode p_mode);
 
 	// isolated-space thread-direct stepping support.
 	bool get_is_isolated() const { return is_isolated; }
@@ -176,7 +179,10 @@ public:
 	// Insertion-order tracking of rigid bodies for space_clone_state ordinal pairing.
 	void body_add_ordered(JoltBody3D *p_body);
 	void body_remove_ordered(JoltBody3D *p_body);
+	void area_add_ordered(JoltArea3D *p_area);
+	void area_remove_ordered(JoltArea3D *p_area);
 	const LocalVector<JoltBody3D *> &get_bodies_ordered() const { return bodies_ordered; }
+	const LocalVector<JoltArea3D *> &get_areas_ordered() const { return areas_ordered; }
 
 	float get_last_step() const { return last_step; }
 
@@ -188,6 +194,7 @@ public:
 	JPH::Body *add_object(const JoltObject3D &p_object, const JPH::SoftBodyCreationSettings &p_settings, bool p_sleeping = false);
 	void remove_object(const JPH::BodyID &p_jolt_id);
 	void flush_pending_objects();
+	void commit_kinematic_transforms();
 
 	void set_is_object_sleeping(const JPH::BodyID &p_jolt_id, bool p_enable);
 

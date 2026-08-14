@@ -122,6 +122,8 @@ private:
 	bool monitorable = false;
 	bool point_gravity = false;
 
+	Transform3D kinematic_transform;
+
 	virtual JPH::BroadPhaseLayer _get_broad_phase_layer() const override;
 	virtual JPH::ObjectLayer _get_object_layer() const override;
 
@@ -161,6 +163,9 @@ public:
 	JoltArea3D();
 
 	void set_transform(Transform3D p_transform);
+
+	void advance_kinematic_manual_step(float p_step);
+	Transform3D get_kinematic_transform() const { return kinematic_transform; }
 
 	Variant get_param(PS3DE::AreaParameter p_param) const;
 	void set_param(PS3DE::AreaParameter p_param, const Variant &p_value);

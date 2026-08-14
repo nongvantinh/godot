@@ -41,12 +41,9 @@
 #define FLOOR_ANGLE_THRESHOLD 0.01
 
 bool CharacterBody3D::move_and_slide(double p_delta) {
-	// Timestep ownership (Aether fork — Docs/adr/simulation-timestep-ownership.md): the caller advancing the
-	// simulation supplies the delta explicitly. CharacterBody derives time from NOTHING global: not the
-	// Engine::time_scale-scaled process delta, not "am I in a physics frame?", not the space's last_step. There
-	// is exactly one clock in the gameplay pipeline and the caller owns it, so a manually-stepped simulation and
-	// the bodies it advances can never sit on two timelines. CharacterBody3D::move_and_slide is now a pure
-	// function of (previous state, velocity, delta).
+	// Manually-driven simulations: the caller advancing the space supplies delta explicitly.
+	// move_and_slide must not read SceneTree process time, physics frame state, or TimeScale-scaled deltas.
+	// CharacterBody3D::move_and_slide is a pure function of (previous state, velocity, delta).
 
 	for (int i = 0; i < 3; i++) {
 		if (locked_axis & (1 << i)) {

@@ -83,6 +83,9 @@ void JoltArea3D::_add_to_space() {
 
 	delete jolt_settings;
 	jolt_settings = nullptr;
+
+	kinematic_transform = get_transform_unscaled();
+	space->area_add_ordered(this);
 }
 
 void JoltArea3D::_enqueue_call_queries() {
@@ -249,6 +252,10 @@ void JoltArea3D::_update_group_filter() {
 void JoltArea3D::_space_changing() {
 	JoltShapedObject3D::_space_changing();
 
+	if (in_space()) {
+		space->area_remove_ordered(this);
+	}
+
 	_remove_all_overlaps();
 	_dequeue_call_queries();
 }
@@ -256,6 +263,7 @@ void JoltArea3D::_space_changing() {
 void JoltArea3D::_space_changed() {
 	JoltShapedObject3D::_space_changed();
 
+	kinematic_transform = get_transform_unscaled();
 	_update_group_filter();
 }
 
@@ -295,9 +303,45 @@ void JoltArea3D::set_transform(Transform3D p_transform) {
 	if (!in_space()) {
 		jolt_settings->mPosition = to_jolt_r(p_transform.origin);
 		jolt_settings->mRotation = to_jolt(p_transform.basis);
+		kinematic_transform = p_transform;
+	} else if (space->get_stepping_mode() == PS3DE::SPACE_STEPPING_MODE_MANUAL) {
+		// Record the target only. Waking the body belongs to the per-step sweep, which runs after the
+		// space has flushed its pending adds — a body created this frame is not in the broadphase yet,
+		// and activating one that is not trips BodyManager's IsInBroadPhase assertion.
+		kinematic_transform = p_transform;
 	} else {
+		kinematic_transform = p_transform;
 		space->get_body_iface().SetPositionAndRotation(jolt_body->GetID(), to_jolt_r(p_transform.origin), to_jolt(p_transform.basis), JPH::EActivation::DontActivate);
 	}
+}
+
+void JoltArea3D::advance_kinematic_manual_step(float p_step) {
+	if (!in_space()) {
+		return;
+	}
+
+	// Clear before the skip check, exactly as JoltBody3D::_move_kinematic does. MoveKinematic does
+	// not teleport: it sets the velocity that carries the body to the target over one step. Once the
+	// target is reached the skip below returns early, so a velocity left resident here would be
+	// integrated again by the next Update and walk the area past its target — and then back through
+	// it, oscillating around the requested pose instead of holding it.
+	jolt_body->SetLinearVelocity(JPH::Vec3::sZero());
+	jolt_body->SetAngularVelocity(JPH::Vec3::sZero());
+
+	const Vector3 current_origin = to_godot(jolt_body->GetPosition());
+	const Basis current_basis = to_godot(jolt_body->GetRotation());
+
+	const bool skip_move = kinematic_transform.origin.is_equal_approx(current_origin)
+			&& kinematic_transform.basis.is_equal_approx(current_basis);
+	if (skip_move) {
+		return;
+	}
+
+	// Safe here and not in set_transform: _pre_step has already flushed pending adds, so the body is
+	// in the broadphase. A sleeping sensor never reaches the broadphase pairs, so it must be woken or
+	// the overlap it is being moved into is never reported.
+	space->get_body_iface().ActivateBody(jolt_body->GetID());
+	jolt_body->MoveKinematic(to_jolt_r(kinematic_transform.origin), to_jolt(kinematic_transform.basis), p_step);
 }
 
 Variant JoltArea3D::get_param(PS3DE::AreaParameter p_param) const {

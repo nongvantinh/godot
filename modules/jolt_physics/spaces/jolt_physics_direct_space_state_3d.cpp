@@ -874,6 +874,9 @@ bool JoltPhysicsDirectSpaceState3D::body_test_motion(const JoltBody3D &p_body, c
 	}
 
 	space->flush_pending_objects();
+	if (space->get_stepping_mode() != PS3DE::SPACE_STEPPING_MODE_MANUAL) {
+		space->commit_kinematic_transforms();
+	}
 
 	const float margin = MAX((float)p_parameters.margin, 0.0001f);
 	const int max_collisions = MIN(p_parameters.max_collisions, 32);
