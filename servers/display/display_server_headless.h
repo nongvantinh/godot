@@ -55,6 +55,11 @@ private:
 	NativeMenu *native_menu = nullptr;
 	Callable input_event_callback;
 
+	// There is no OS window, but the main window still has the size it was requested at (`--resolution`,
+	// the project's window size, or `window_set_size`). The scene tree lays the root viewport out at the
+	// size reported here; reporting nothing collapses every layout to the root's minimum size instead.
+	Size2i main_window_size;
+
 public:
 	bool has_feature(DisplayServerEnums::Feature p_feature) const override { return false; }
 	String get_name() const override { return "headless"; }
@@ -115,9 +120,9 @@ public:
 	void window_set_min_size(const Size2i p_size, DisplayServerEnums::WindowID p_window = DisplayServerEnums::MAIN_WINDOW_ID) override {}
 	Size2i window_get_min_size(DisplayServerEnums::WindowID p_window = DisplayServerEnums::MAIN_WINDOW_ID) const override { return Size2i(); }
 
-	void window_set_size(const Size2i p_size, DisplayServerEnums::WindowID p_window = DisplayServerEnums::MAIN_WINDOW_ID) override {}
-	Size2i window_get_size(DisplayServerEnums::WindowID p_window = DisplayServerEnums::MAIN_WINDOW_ID) const override { return Size2i(); }
-	Size2i window_get_size_with_decorations(DisplayServerEnums::WindowID p_window = DisplayServerEnums::MAIN_WINDOW_ID) const override { return Size2i(); }
+	void window_set_size(const Size2i p_size, DisplayServerEnums::WindowID p_window = DisplayServerEnums::MAIN_WINDOW_ID) override;
+	Size2i window_get_size(DisplayServerEnums::WindowID p_window = DisplayServerEnums::MAIN_WINDOW_ID) const override;
+	Size2i window_get_size_with_decorations(DisplayServerEnums::WindowID p_window = DisplayServerEnums::MAIN_WINDOW_ID) const override { return window_get_size(p_window); }
 
 	void window_set_mode(DisplayServerEnums::WindowMode p_mode, DisplayServerEnums::WindowID p_window = DisplayServerEnums::MAIN_WINDOW_ID) override {}
 	DisplayServerEnums::WindowMode window_get_mode(DisplayServerEnums::WindowID p_window = DisplayServerEnums::MAIN_WINDOW_ID) const override { return DisplayServerEnums::WINDOW_MODE_MINIMIZED; }
@@ -187,6 +192,6 @@ public:
 	void status_indicator_set_callback(DisplayServerEnums::IndicatorID p_id, const Callable &p_callback) override {}
 	void delete_status_indicator(DisplayServerEnums::IndicatorID p_id) override {}
 
-	DisplayServerHeadless();
+	DisplayServerHeadless(const Size2i &p_main_window_size = Size2i());
 	~DisplayServerHeadless();
 };

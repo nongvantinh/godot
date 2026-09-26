@@ -38,7 +38,7 @@
 DisplayServer *DisplayServerHeadless::create_func(const String &p_rendering_driver, DisplayServerEnums::WindowMode p_mode, DisplayServerEnums::VSyncMode p_vsync_mode, uint32_t p_flags, const Vector2i *p_position, const Vector2i &p_resolution, int p_screen, DisplayServerEnums::Context p_context, int64_t p_parent_window, Error &r_error) {
 	r_error = OK;
 	RasterizerDummy::make_current();
-	return memnew(DisplayServerHeadless());
+	return memnew(DisplayServerHeadless(p_resolution));
 }
 
 void DisplayServerHeadless::_dispatch_input_events(const Ref<InputEvent> &p_event) {
@@ -51,11 +51,22 @@ void DisplayServerHeadless::_dispatch_input_event(const Ref<InputEvent> &p_event
 	}
 }
 
+void DisplayServerHeadless::window_set_size(const Size2i p_size, DisplayServerEnums::WindowID p_window) {
+	if (p_window == DisplayServerEnums::MAIN_WINDOW_ID) {
+		main_window_size = p_size.maxi(0);
+	}
+}
+
+Size2i DisplayServerHeadless::window_get_size(DisplayServerEnums::WindowID p_window) const {
+	return p_window == DisplayServerEnums::MAIN_WINDOW_ID ? main_window_size : Size2i();
+}
+
 void DisplayServerHeadless::process_events() {
 	Input::get_singleton()->flush_buffered_events();
 }
 
-DisplayServerHeadless::DisplayServerHeadless() {
+DisplayServerHeadless::DisplayServerHeadless(const Size2i &p_main_window_size) :
+		main_window_size(p_main_window_size.maxi(0)) {
 	native_menu = memnew(NativeMenu);
 	Input::get_singleton()->set_event_dispatch_function(_dispatch_input_events);
 }
